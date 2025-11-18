@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Payment Dashboard</title>
+    <link rel="stylesheet" href="styles.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.js"></script>
+    <script src="https://js.stripe.com/v3/"></script>
+</head>
+<body>
+    <div class="app-container">
+        <header class="dashboard-header">
+            <h1>💳 Payment Dashboard</h1>
+            <div class="header-controls">
+                <div class="control-group">
+                    <label class="control-label">View:</label>
+                    <button id="compactViewBtn" class="btn btn-view active">⚡ Compact</button>
+                    <button id="detailedViewBtn" class="btn btn-view">📊 Detailed</button>
+                </div>
+                <div class="control-group">
+                    <label class="control-label">Sort:</label>
+                    <select id="sortSelect" class="select-control">
+                        <option value="default">Default Order</option>
+                        <option value="revenue-desc">Revenue (High to Low)</option>
+                        <option value="revenue-asc">Revenue (Low to High)</option>
+                        <option value="growth-desc">Growth (High to Low)</option>
+                        <option value="name-asc">Name (A to Z)</option>
+                    </select>
+                </div>
+                <div class="control-group">
+                    <label class="control-label">Filter:</label>
+                    <select id="filterSelect" class="select-control">
+                        <option value="all">All Projects</option>
+                        <option value="stripe">Stripe Only</option>
+                        <option value="paypal">PayPal Only</option>
+                        <option value="both">Both Providers</option>
+                    </select>
+                </div>
+                <button id="refreshBtn" class="btn btn-primary">🔄 Refresh</button>
+                <button id="resetLayoutBtn" class="btn btn-secondary">↺ Reset</button>
+            </div>
+        </header>
+
+        <main class="dashboard-main">
+            <div id="summarySection" class="summary-section">
+                <!-- Summary stats will be generated here -->
+            </div>
+            <div id="widgetContainer" class="widget-container">
+                <!-- Widgets will be dynamically generated here -->
+            </div>
+        </main>
+
+        <div id="loadingOverlay" class="loading-overlay">
+            <div class="spinner"></div>
+            <p>Loading dashboard...</p>
+        </div>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>

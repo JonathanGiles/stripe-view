@@ -1,0 +1,9 @@
+node_modules/
+server.log
+.server.pid
+config.json
+view.json
+
+# Build artifacts
+dist/
+*.exe

@@ -1,0 +1,30 @@
+{
+  "projects": [
+    {
+      "id": "project1",
+      "name": "Example Project 1",
+      "stripe": {
+        "apiKey": "sk_test_your_stripe_key_here",
+        "enabled": true
+      },
+      "paypal": {
+        "clientId": "your_paypal_client_id_here",
+        "secret": "your_paypal_secret_here",
+        "enabled": true
+      }
+    },
+    {
+      "id": "project2",
+      "name": "Example Project 2",
+      "stripe": {
+        "apiKey": "sk_test_another_stripe_key",
+        "enabled": true
+      },
+      "paypal": {
+        "clientId": "another_paypal_client_id",
+        "secret": "another_paypal_secret",
+        "enabled": false
+      }
+    }
+  ]
+}

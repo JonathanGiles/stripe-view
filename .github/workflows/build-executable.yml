@@ -1,0 +1,71 @@
+name: Build Windows Executable
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+      
+      - name: Install dependencies
+        run: npm ci
+      
+      - name: Build executable
+        run: npm run build
+      
+      - name: Create release package
+        run: |
+          mkdir release
+          copy dist\stripe-view-win.exe release\
+          copy config.json release\config.example.json
+          echo {"projects":[]} > release\config.json
+          echo {} > release\view.json
+          echo Stripe View Dashboard > release\README.txt
+          echo ====================== >> release\README.txt
+          echo. >> release\README.txt
+          echo QUICK START: >> release\README.txt
+          echo 1. Edit config.json with your API credentials >> release\README.txt
+          echo 2. Double-click stripe-view-win.exe >> release\README.txt
+          echo 3. Your browser will open to http://localhost:3000 >> release\README.txt
+          echo. >> release\README.txt
+          echo To stop: Close the terminal window or press Ctrl+C >> release\README.txt
+          echo. >> release\README.txt
+          echo FILES: >> release\README.txt
+          echo - stripe-view-win.exe: The application (double-click to run) >> release\README.txt
+          echo - config.json: Your API credentials (edit this file) >> release\README.txt
+          echo - view.json: Saved layout preferences (auto-generated) >> release\README.txt
+          echo - config.example.json: Example configuration >> release\README.txt
+        shell: cmd
+      
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: stripe-view-windows
+          path: release/
+      
+      - name: Create Release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v1
+        with:
+          files: |
+            release/stripe-view-win.exe
+            release/config.json
+            release/config.example.json
+            release/view.json
+            release/README.txt
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
