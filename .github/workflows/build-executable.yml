@@ -31,7 +31,6 @@ jobs:
         run: |
           mkdir release
           copy dist\stripe-view-win.exe release\
-          copy config.json release\config.example.json
           echo {"projects":[]} > release\config.json
           echo {} > release\view.json
           echo Stripe View Dashboard > release\README.txt
@@ -48,7 +47,6 @@ jobs:
           echo - stripe-view-win.exe: The application (double-click to run) >> release\README.txt
           echo - config.json: Your API credentials (edit this file) >> release\README.txt
           echo - view.json: Saved layout preferences (auto-generated) >> release\README.txt
-          echo - config.example.json: Example configuration >> release\README.txt
         shell: cmd
       
       - name: Upload artifact
@@ -64,7 +62,6 @@ jobs:
           files: |
             release/stripe-view-win.exe
             release/config.json
-            release/config.example.json
             release/view.json
             release/README.txt
           draft: false
