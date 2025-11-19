@@ -10,6 +10,12 @@ class PaymentDashboard {
         this.viewMode = 'compact'; // 'compact' or 'detailed'
         this.sortBy = 'default';
         this.filterBy = 'all';
+        this.preferredCurrency = 'NZD';
+        this.exchangeRates = {};
+        this.pollingInterval = null;
+        this.lastSalesCount = new Map(); // Track sales count per project for change detection
+        this.saleSound = new Audio('data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQoGAACBhYqFbF1fdJivrJBhNjVgodDbq2EcBj+a2/LDciUFLIHO8tiJNwgZaLvt559NEAxQp+PwtmMcBjiR1/LMeSwFJHfH8N2QQAoUXrTp66hVFApGn+DyvmwhBTGH0fPTgjMGHm7A7+OZRQ0PVqzn77BgGQc+ltryxnMoBSuAzvLZiTcIGWm98OScTgwNUajk7bdfGgY5ktjzyn0tBSV+zPDbjUEKFGG36+yjWBULSKLi8r1nHwYziM/z1YU2Bhxrwu7mnEQOD1Ot5++1YhsGPJbe8sd0KAUrgM3y2Yk3CBlqvfDknE4MDFKp5O2+YRoFOpPY88p9LQUlfsz/3Y5BCRVju+njpFsVDEmj4PG9aBwGM4nQ89WFNgYcbcLu5JtEDg5TrOfvtGIbBTuV3vPIdSgFK4HO8tmJOAgaarz/5JxODAxSqeTtvmEaBTuV2PPK/S0FJn/N8N2OQgkUYrvp5KNbFQxJo+DxvWkcBjOJ0PPVhTYGHG7D7uSbRA4OU6vn77NjGwU7ld7zyHYoBSuBzvLZiTgIGmq88OSbTgwMUqnk7b5hGgU7ldjzyv0tBSZ/zfDejkIJFGK76eOkWxUMSaPg8b1pHAYzidDz1YU2Bhxvw+7km0QODlOr5++yYhsFO5Xe88h2KAUrgc7y2Yk4CBpqvPDkm04MDFKp5O2+YRoFO5XY88r9LQUmf83w3o5CCRRiu+njpFsVDEmj4PG9aRwGM4nQ89WFNgYcb8Pu5JtEDg5Tq+fvsmIbBTuV3vPIdigFK4HO8tmJOAgaarzw5JtODAxSqeTtvmEaBTuV2PPK/S0FJn/N8N6OQgkUYrvp46RbFQxJo+DxvWkcBjOJ0PPVhTYGHG/D7uSbRA4OU6vn77JiGwU7ld7zyHYoBSuBzvLZiTgIGmq88OSbTgwMUqnk7b5hGgU7ldjzyv0tBSZ/zfDejkIJFGK76eOkWxUMSaPg8b1pHAYzidDz1YU2Bhxvw+7km0QODlOr5++yYhsFO5Xe88h2KAUrgc7y2Yk4CBpqvPDkm04MDFKp5O2+YRoFO5XY88r9LQUmf83w3o5CCRRiu+njpFsVDEmj4PG9aRwGM4nQ89WFNgYcb8Pu5JtEDg5Tq+fvsmIbBTuV3vPIdigFK4HO8tmJOAgaarzw5JtODAxSqeTtvmEaBTuV2PPK/S0FJn/N8N6OQgkUYrvp46RbFQxJo+DxvWkcBjOJ0PPVhTYGHG/D7uSbRA4OU6vn77JiGwU7ld7zyHYoBSuBzvLZiTgIGmq88OSbTgwMUqnk7b5hGgU7ldjzyv0tBSZ/zfDejkIJFGK76eOkWxUMSaPg8b1pHAYzidDz1YU2Bhxvw+7km0QODlOr5++yYhsFO5Xe88h2KAUrgc7y2Yk4CBpqvPDkm04MDFKp5O2+YRoFO5XY88r9LQUmf83w3o5CCRRiu+njpFsVDEmj4PG9aRwGM4nQ89WFNgYcb8Pu5JtEDg5Tq+fvsmIbBTuV3vPIdigFK4HO8tmJOAgaarzw5JtODAxSqeTtvmEaBTuV2PPK/S0FJn/N8N6OQgkUYrvp46RbFQxJo+DxvWkcBjOJ0PPVhTYGHG/D7uSbRA4OU6vn77JiGwU7ld7zyHYoBSuBzvLZiTgIGmq88OSbTgwMUqnk7b5hGgU7ldjzyv0tBSZ/zfDejkIJFGK76eOkWxUMSaPg8b1pHAYzidDz1YU2Bhxvw+7km0QODlOr5++yYhsFO5Xe88h2KAUrgc7y2Yk4CBpqvPDkm04MDFKp5O2+YRoFO5XY88r9LQUmf83w3o5CCRRiu+njpFsVDEmj4PG9aRwGM4nQ89WFNgYcb8Pu5JtEDg5Tq+fvsmIbBTuV3vPIdigFK4HO8tmJOAgaarzw5JtODAxSqeTtvmEa');
+        this.overviewChart = null; // Store overview chart instance
         this.projectsData = new Map();
         
         this.loadPreferences();
@@ -20,6 +26,7 @@ class PaymentDashboard {
         try {
             await this.loadConfig();
             await this.loadViewLayout();
+            await this.fetchExchangeRates();
             await this.renderDashboard();
             this.setupEventListeners();
             this.hideLoading();
@@ -28,6 +35,123 @@ class PaymentDashboard {
             this.showError('Failed to initialize dashboard. Please check your config files.');
             this.hideLoading();
         }
+    }
+
+    async fetchExchangeRates() {
+        try {
+            // Use exchangerate-api.com free tier (no API key needed for basic usage)
+            const response = await fetch('https://api.exchangerate-api.com/v4/latest/USD');
+            if (!response.ok) throw new Error('Failed to fetch exchange rates');
+            const data = await response.json();
+            this.exchangeRates = data.rates;
+            console.log(`✓ Exchange rates loaded (1 USD = ${this.exchangeRates[this.preferredCurrency]} ${this.preferredCurrency})`);
+        } catch (error) {
+            console.warn('Could not fetch exchange rates, using defaults:', error);
+            // Fallback rates if API fails
+            this.exchangeRates = {
+                USD: 1,
+                NZD: 1.65,
+                AUD: 1.52,
+                EUR: 0.92,
+                GBP: 0.79,
+                CAD: 1.36
+            };
+        }
+    }
+
+    convertCurrency(amountUSD) {
+        if (!amountUSD || isNaN(amountUSD)) return 0;
+        const rate = this.exchangeRates[this.preferredCurrency] || 1;
+        return amountUSD * rate;
+    }
+
+    startAutoRefresh() {
+        // Get polling interval from config (default 60 seconds)
+        const intervalSeconds = this.config.pollingIntervalSeconds || 60;
+        console.log(`🔄 Auto-refresh enabled: every ${intervalSeconds} seconds`);
+        
+        // Clear any existing interval
+        if (this.pollingInterval) {
+            clearInterval(this.pollingInterval);
+        }
+        
+        // Start polling
+        this.pollingInterval = setInterval(async () => {
+            await this.refreshData();
+        }, intervalSeconds * 1000);
+    }
+
+    async refreshData() {
+        try {
+            console.log('🔄 Background refresh...');
+            const oldProjectsData = new Map(this.projectsData);
+            
+            // Clear cached data to fetch fresh from APIs
+            this.projectsData.clear();
+            
+            // Re-fetch all project data
+            await this.renderDashboard();
+            
+            // Check for new sales and play sound
+            this.detectNewSales(oldProjectsData);
+        } catch (error) {
+            console.error('Background refresh failed:', error);
+        }
+    }
+
+    detectNewSales(oldProjectsData) {
+        let hasNewSales = false;
+        
+        for (const [projectId, newData] of this.projectsData.entries()) {
+            const oldData = oldProjectsData.get(projectId);
+            if (!oldData) continue;
+            
+            // Check if order count increased
+            if (newData.orders > oldData.orders) {
+                const newSalesCount = newData.orders - oldData.orders;
+                console.log(`🎉 New sale detected in ${projectId}: ${newSalesCount} new order(s)!`);
+                hasNewSales = true;
+            }
+        }
+        
+        if (hasNewSales) {
+            this.playSaleSound();
+        }
+    }
+
+    playSaleSound() {
+        try {
+            // Create a simple pleasant notification sound
+            const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+            const oscillator = audioContext.createOscillator();
+            const gainNode = audioContext.createGain();
+            
+            oscillator.connect(gainNode);
+            gainNode.connect(audioContext.destination);
+            
+            // Pleasant chime sound (C5, E5, G5)
+            const notes = [523.25, 659.25, 783.99];
+            let time = audioContext.currentTime;
+            
+            notes.forEach((freq, i) => {
+                oscillator.frequency.setValueAtTime(freq, time);
+                gainNode.gain.setValueAtTime(0.3, time);
+                gainNode.gain.exponentialRampToValueAtTime(0.01, time + 0.3);
+                time += 0.15;
+            });
+            
+            oscillator.start(audioContext.currentTime);
+            oscillator.stop(audioContext.currentTime + 0.6);
+        } catch (error) {
+            console.warn('Could not play sound:', error);
+        }
+    }
+
+    formatCurrency(amount) {
+        const converted = this.convertCurrency(amount);
+        const symbol = this.preferredCurrency === 'EUR' ? '€' : 
+                      this.preferredCurrency === 'GBP' ? '£' : '$';
+        return `${symbol}${Math.round(converted).toLocaleString()}`;
     }
 
     async loadConfig() {
@@ -52,26 +176,19 @@ class PaymentDashboard {
     }
 
     loadPreferences() {
-        const prefs = localStorage.getItem('dashboardPreferences');
-        if (prefs) {
-            try {
-                const { viewMode, sortBy, filterBy } = JSON.parse(prefs);
-                this.viewMode = viewMode || 'compact';
-                this.sortBy = sortBy || 'default';
-                this.filterBy = filterBy || 'all';
-            } catch (error) {
-                console.error('Failed to load preferences:', error);
-            }
+        // Load from view.json (already loaded in loadViewLayout)
+        if (this.viewLayout && this.viewLayout.preferences) {
+            const { viewMode, sortBy, filterBy, preferredCurrency } = this.viewLayout.preferences;
+            this.viewMode = viewMode || 'compact';
+            this.sortBy = sortBy || 'default';
+            this.filterBy = filterBy || 'all';
+            this.preferredCurrency = preferredCurrency || 'NZD';
         }
     }
 
     savePreferences() {
-        const prefs = {
-            viewMode: this.viewMode,
-            sortBy: this.sortBy,
-            filterBy: this.filterBy
-        };
-        localStorage.setItem('dashboardPreferences', JSON.stringify(prefs));
+        // Preferences are saved together with layout in saveViewLayout
+        this.saveViewLayout();
     }
 
     async saveViewLayout() {
@@ -82,11 +199,25 @@ class PaymentDashboard {
                         projectId: widget.projectId,
                         position: index
                     }))
+                },
+                preferences: {
+                    viewMode: this.viewMode,
+                    sortBy: this.sortBy,
+                    filterBy: this.filterBy,
+                    preferredCurrency: this.preferredCurrency
                 }
             };
 
-            localStorage.setItem('dashboardLayout', JSON.stringify(layoutData));
-            console.log('Layout saved to localStorage:', layoutData);
+            // Save to server (view.json file)
+            const response = await fetch('http://localhost:3000/api/save-view', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(layoutData)
+            });
+
+            if (!response.ok) throw new Error('Failed to save to server');
+            
+            console.log('Layout saved to view.json:', layoutData);
             this.showNotification('Layout saved successfully!');
         } catch (error) {
             console.error('Failed to save layout:', error);
@@ -218,52 +349,148 @@ class PaymentDashboard {
         const summaryData = this.calculateSummaryData(projects);
         const section = document.getElementById('summarySection');
         
-        // Calculate additional metrics
-        const avgRevenue = summaryData.totalRevenue / projects.length;
-        const totalOrders = Array.from(this.projectsData.values()).reduce((sum, data) => sum + data.orders, 0);
-        const avgGrowth = (Array.from(this.projectsData.values()).reduce((sum, data) => sum + parseFloat(data.growth), 0) / projects.length).toFixed(1);
-        
-        // Find top and bottom performers
-        const sortedByRevenue = [...projects].sort((a, b) => {
-            return this.projectsData.get(b.id).revenue - this.projectsData.get(a.id).revenue;
-        });
-        const topProject = sortedByRevenue[0];
-        const bottomProject = sortedByRevenue[sortedByRevenue.length - 1];
-        
         section.innerHTML = `
             <div class="summary-stats">
                 <div class="summary-stat-card">
                     <div class="summary-stat-label">Total Revenue (30 Days)</div>
-                    <div class="summary-stat-value">$${summaryData.totalRevenue.toLocaleString()}</div>
-                    <div class="summary-stat-change">↗ Avg Growth: ${avgGrowth}%</div>
+                    <div class="summary-stat-value">${this.formatCurrency(summaryData.totalRevenue)}</div>
+                    <div class="summary-stat-change">Last 30 days across all projects</div>
                 </div>
                 <div class="summary-stat-card">
-                    <div class="summary-stat-label">Total Projects</div>
-                    <div class="summary-stat-value">${projects.length}</div>
-                    <div class="summary-stat-change">Avg: $${Math.round(avgRevenue).toLocaleString()}</div>
+                    <div class="summary-stat-label">Month to Date</div>
+                    <div class="summary-stat-value">${this.formatCurrency(summaryData.monthToDateRevenue)}</div>
+                    <div class="summary-stat-change">Revenue since ${new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric' }).split(' ')[0]} 1</div>
                 </div>
                 <div class="summary-stat-card">
-                    <div class="summary-stat-label">Total Orders (30 Days)</div>
-                    <div class="summary-stat-value">${totalOrders.toLocaleString()}</div>
-                    <div class="summary-stat-change">Across all projects</div>
-                </div>
-                <div class="summary-stat-card">
-                    <div class="summary-stat-label">Payment Providers</div>
-                    <div class="summary-stat-value">${summaryData.activeStripe + summaryData.activePaypal}</div>
-                    <div class="summary-stat-change">Stripe: ${summaryData.activeStripe} • PayPal: ${summaryData.activePaypal}</div>
-                </div>
-                <div class="summary-stat-card">
-                    <div class="summary-stat-label">🏆 Top Performer</div>
-                    <div class="summary-stat-value" style="font-size: 1.25rem;">${topProject.name}</div>
-                    <div class="summary-stat-change">$${this.projectsData.get(topProject.id).revenue.toLocaleString()}</div>
-                </div>
-                <div class="summary-stat-card">
-                    <div class="summary-stat-label">Growth Opportunity</div>
-                    <div class="summary-stat-value" style="font-size: 1.25rem;">${bottomProject.name}</div>
-                    <div class="summary-stat-change">$${this.projectsData.get(bottomProject.id).revenue.toLocaleString()}</div>
+                    <div class="summary-stat-label">Today</div>
+                    <div class="summary-stat-value">${this.formatCurrency(summaryData.todayRevenue)}</div>
+                    <div class="summary-stat-change">Revenue for ${new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</div>
                 </div>
             </div>
         `;
+    }
+
+    renderOverviewGraph(projects) {
+        // Combine revenue data from all projects for the last 30 days
+        const today = new Date();
+        const combinedData = new Map();
+        const labels = [];
+        
+        // Initialize all 30 days
+        for (let i = 29; i >= 0; i--) {
+            const date = new Date(today);
+            date.setDate(date.getDate() - i);
+            const dateKey = date.toISOString().split('T')[0];
+            const label = date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+            labels.push(label);
+            combinedData.set(dateKey, 0);
+        }
+        
+        // Sum revenue from all projects for each day
+        projects.forEach(project => {
+            const salesData = this.projectsData.get(project.id);
+            if (salesData && salesData.revenueData) {
+                salesData.revenueData.forEach((revenue, index) => {
+                    const daysBack = 29 - index;
+                    const date = new Date(today);
+                    date.setDate(date.getDate() - daysBack);
+                    const dateKey = date.toISOString().split('T')[0];
+                    
+                    if (combinedData.has(dateKey)) {
+                        combinedData.set(dateKey, combinedData.get(dateKey) + revenue);
+                    }
+                });
+            }
+        });
+        
+        // Convert map to array
+        const revenueData = Array.from(combinedData.values());
+        
+        // Destroy existing chart if it exists
+        if (this.overviewChart) {
+            this.overviewChart.destroy();
+        }
+        
+        // Create the chart
+        const ctx = document.getElementById('overviewChart').getContext('2d');
+        const currencySymbol = this.preferredCurrency === 'EUR' ? '€' : 
+                              this.preferredCurrency === 'GBP' ? '£' : '$';
+        
+        this.overviewChart = new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: labels,
+                datasets: [{
+                    label: `Revenue (${this.preferredCurrency})`,
+                    data: revenueData,
+                    borderColor: '#667eea',
+                    backgroundColor: 'rgba(102, 126, 234, 0.1)',
+                    borderWidth: 3,
+                    fill: true,
+                    tension: 0.4,
+                    pointRadius: 2,
+                    pointHoverRadius: 5,
+                    pointBackgroundColor: '#667eea',
+                    pointBorderColor: '#fff',
+                    pointBorderWidth: 2
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                interaction: {
+                    intersect: false,
+                    mode: 'index'
+                },
+                plugins: {
+                    legend: {
+                        display: false
+                    },
+                    tooltip: {
+                        backgroundColor: 'rgba(0, 0, 0, 0.8)',
+                        padding: 12,
+                        titleColor: '#fff',
+                        bodyColor: '#fff',
+                        borderColor: '#667eea',
+                        borderWidth: 1,
+                        displayColors: false,
+                        callbacks: {
+                            label: (context) => {
+                                return `${currencySymbol}${Math.round(context.parsed.y).toLocaleString()}`;
+                            }
+                        }
+                    }
+                },
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        ticks: {
+                            callback: (value) => {
+                                return currencySymbol + Math.round(value).toLocaleString();
+                            },
+                            font: {
+                                size: 11
+                            }
+                        },
+                        grid: {
+                            color: 'rgba(0, 0, 0, 0.05)'
+                        }
+                    },
+                    x: {
+                        ticks: {
+                            font: {
+                                size: 10
+                            },
+                            maxRotation: 45,
+                            minRotation: 45
+                        },
+                        grid: {
+                            display: false
+                        }
+                    }
+                }
+            }
+        });
     }
 
     createProjectWidget(container, project, index) {
@@ -428,8 +655,9 @@ class PaymentDashboard {
         // Create chart after widget is updated
         setTimeout(() => this.createProjectChart(project, salesData), 0);
         
-        // Update summary section
+        // Update summary section and overview graph
         this.renderSummarySection(this.config.projects);
+        this.renderOverviewGraph(this.config.projects);
     }
 
     getProjectWidgetHTML(project, salesData) {
@@ -448,6 +676,12 @@ class PaymentDashboard {
         const trendIcon = parseFloat(salesData.growth) > 0 ? '↗' : parseFloat(salesData.growth) < 0 ? '↘' : '→';
         const trendClass = parseFloat(salesData.growth) > 0 ? 'up' : parseFloat(salesData.growth) < 0 ? 'down' : 'flat';
         
+        // Calculate today's metrics
+        const today = salesData.todayRevenue || 0;
+        const yesterday = salesData.yesterdayRevenue || 0;
+        const todayChange = yesterday > 0 ? (((today - yesterday) / yesterday) * 100).toFixed(1) : '0.0';
+        const todayTrend = parseFloat(todayChange) > 0 ? 'up' : parseFloat(todayChange) < 0 ? 'down' : 'flat';
+        
         return `
             <div class="widget-header">
                 <div>
@@ -462,50 +696,53 @@ class PaymentDashboard {
                 <div class="widget-drag-handle" title="Drag to reorder">⋮⋮</div>
             </div>
             <div class="widget-content">
-                <div class="stats-grid">
-                    <div class="stat-card">
-                        <div class="stat-label">Revenue (30d)</div>
-                        <div class="stat-value">$${salesData.revenue.toLocaleString()}</div>
-                        <div class="stat-change ${trendClass}">
-                            <span class="trend-indicator ${trendClass}">${trendIcon} ${salesData.growth}%</span>
-                        </div>
+                <!-- Key Metrics Row -->
+                <div class="metrics-compact">
+                    <div class="metric-item">
+                        <div class="metric-label">Today</div>
+                        <div class="metric-value-large">${this.formatCurrency(today)}</div>
+                        <div class="metric-change ${todayTrend}">${todayChange}%</div>
                     </div>
-                    <div class="stat-card">
-                        <div class="stat-label">Orders</div>
-                        <div class="stat-value">${salesData.orders}</div>
-                        <div class="stat-change">Avg: $${salesData.avgOrderValue}</div>
+                    <div class="metric-item">
+                        <div class="metric-label">30 Days</div>
+                        <div class="metric-value-large">${this.formatCurrency(salesData.revenue)}</div>
+                        <div class="metric-change ${trendClass}">${trendIcon} ${salesData.growth}%</div>
                     </div>
-                </div>
-                
-                ${(hasStripe || hasPaypal) && this.viewMode === 'detailed' ? `
-                <div class="balance-section">
-                    ${hasStripe && salesData.stripeBalance !== undefined ? `
-                    <div class="balance-card">
-                        <span class="balance-label">💳 Stripe Balance</span>
-                        <span class="balance-value">$${salesData.stripeBalance.toLocaleString()}</span>
+                    <div class="metric-item">
+                        <div class="metric-label">Orders</div>
+                        <div class="metric-value-large">${salesData.orders}</div>
+                        <div class="metric-sub">${this.formatCurrency(salesData.avgOrderValue)} avg</div>
                     </div>
-                    ` : ''}
-                    ${hasPaypal && salesData.paypalBalance !== undefined ? `
-                    <div class="balance-card">
-                        <span class="balance-label">🅿️ PayPal Balance</span>
-                        <span class="balance-value">$${salesData.paypalBalance.toLocaleString()}</span>
+                    ${(hasStripe || hasPaypal) ? `
+                    <div class="metric-item">
+                        <div class="metric-label">Balance</div>
+                        <div class="metric-value-large">${this.formatCurrency(salesData.stripeBalance + salesData.paypalBalance)}</div>
+                        <div class="metric-sub">${hasStripe ? 'S: ' + this.formatCurrency(salesData.stripeBalance) : ''}${hasStripe && hasPaypal ? ' ' : ''}${hasPaypal ? 'P: ' + this.formatCurrency(salesData.paypalBalance) : ''}</div>
                     </div>
                     ` : ''}
                 </div>
-                ` : ''}
                 
+                <!-- Chart -->
                 <div class="chart-container">
                     <canvas id="chart-${project.id}"></canvas>
                 </div>
                 
-                ${this.viewMode === 'detailed' ? `
-                <div class="metric-row">
-                    <span class="metric-label">Avg Order Value</span>
-                    <span class="metric-value">$${salesData.avgOrderValue}</span>
-                </div>
-                <div class="metric-row">
-                    <span class="metric-label">Conversion Rate</span>
-                    <span class="metric-value">${salesData.conversionRate}%</span>
+                <!-- Recent Activity Feed -->
+                ${this.viewMode === 'detailed' && salesData.recentActivity && salesData.recentActivity.length > 0 ? `
+                <div class="activity-feed">
+                    <div class="activity-header">
+                        <span class="activity-title">💰 Recent Sales (24h)</span>
+                        <span class="activity-count">${salesData.recentActivity.length} transactions</span>
+                    </div>
+                    <div class="activity-list">
+                        ${salesData.recentActivity.slice(0, 10).map(activity => `
+                            <div class="activity-item">
+                                <span class="activity-time">${activity.timeAgo}</span>
+                                <span class="activity-amount">${this.formatCurrency(activity.amount)}</span>
+                                <span class="activity-desc">${activity.description}</span>
+                            </div>
+                        `).join('')}
+                    </div>
                 </div>
                 ` : ''}
                 
@@ -678,19 +915,42 @@ class PaymentDashboard {
 
     calculateSummaryData(projects) {
         let totalRevenue = 0;
+        let todayRevenue = 0;
+        let monthToDateRevenue = 0;
         let activeStripe = 0;
         let activePaypal = 0;
+
+        const today = new Date();
+        const firstOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+        const todayDateKey = today.toISOString().split('T')[0];
 
         projects.forEach(project => {
             const salesData = this.projectsData.get(project.id);
             if (salesData) {
                 totalRevenue += salesData.revenue;
+                todayRevenue += salesData.todayRevenue || 0;
+                
+                // Calculate month-to-date by iterating through the 30-day window
+                // and summing only dates that fall in the current month
+                if (salesData.revenueData && salesData.labels) {
+                    for (let i = 0; i < salesData.labels.length; i++) {
+                        // Reconstruct the date from our 30-day window
+                        const daysBack = 29 - i;
+                        const date = new Date(today);
+                        date.setDate(date.getDate() - daysBack);
+                        
+                        // If this date is in the current month, add its revenue
+                        if (date >= firstOfMonth && date <= today) {
+                            monthToDateRevenue += salesData.revenueData[i] || 0;
+                        }
+                    }
+                }
             }
             if (project.stripe?.enabled) activeStripe++;
             if (project.paypal?.enabled) activePaypal++;
         });
 
-        return { totalRevenue, activeStripe, activePaypal };
+        return { totalRevenue, todayRevenue, monthToDateRevenue, activeStripe, activePaypal };
     }
 
     async fetchProjectSalesData(project) {
@@ -868,7 +1128,13 @@ class PaymentDashboard {
                 if (charge.paid && !charge.refunded) {
                     const date = new Date(charge.created * 1000);
                     const dateKey = date.toISOString().split('T')[0];
-                    const amount = charge.amount / 100; // Convert from cents
+                    const sourceCurrency = (charge.currency || 'usd').toUpperCase();
+                    let amount = charge.amount / 100; // Convert from cents
+                    
+                    // Convert to USD if source is not USD
+                    if (sourceCurrency !== 'USD' && this.exchangeRates[sourceCurrency]) {
+                        amount = amount / this.exchangeRates[sourceCurrency];
+                    }
                     
                     if (dailySales.has(dateKey)) {
                         const day = dailySales.get(dateKey);
@@ -883,7 +1149,13 @@ class PaymentDashboard {
             
             if (stripeData.balance?.available) {
                 stripeBalance = stripeData.balance.available.reduce((sum, bal) => {
-                    return sum + (bal.amount / 100);
+                    const sourceCurrency = (bal.currency || 'usd').toUpperCase();
+                    let amount = bal.amount / 100;
+                    // Convert to USD if source is not USD
+                    if (sourceCurrency !== 'USD' && this.exchangeRates[sourceCurrency]) {
+                        amount = amount / this.exchangeRates[sourceCurrency];
+                    }
+                    return sum + amount;
                 }, 0);
             }
         }
@@ -894,7 +1166,13 @@ class PaymentDashboard {
                 if (transaction.transaction_info?.transaction_status === 'S') { // Success
                     const date = new Date(transaction.transaction_info.transaction_initiation_date);
                     const dateKey = date.toISOString().split('T')[0];
-                    const amount = Math.abs(parseFloat(transaction.transaction_info?.transaction_amount?.value || 0));
+                    const sourceCurrency = (transaction.transaction_info?.transaction_amount?.currency_code || 'USD').toUpperCase();
+                    let amount = Math.abs(parseFloat(transaction.transaction_info?.transaction_amount?.value || 0));
+                    
+                    // Convert to USD if source is not USD
+                    if (sourceCurrency !== 'USD' && this.exchangeRates[sourceCurrency]) {
+                        amount = amount / this.exchangeRates[sourceCurrency];
+                    }
                     
                     if (dailySales.has(dateKey)) {
                         const day = dailySales.get(dateKey);
@@ -909,7 +1187,13 @@ class PaymentDashboard {
             
             if (paypalData.balance?.balances) {
                 paypalBalance = paypalData.balance.balances.reduce((sum, bal) => {
-                    return sum + parseFloat(bal.total_balance?.value || 0);
+                    const sourceCurrency = (bal.total_balance?.currency_code || 'USD').toUpperCase();
+                    let amount = parseFloat(bal.total_balance?.value || 0);
+                    // Convert to USD if source is not USD
+                    if (sourceCurrency !== 'USD' && this.exchangeRates[sourceCurrency]) {
+                        amount = amount / this.exchangeRates[sourceCurrency];
+                    }
+                    return sum + amount;
                 }, 0);
             }
         }
@@ -935,20 +1219,107 @@ class PaymentDashboard {
             ? (((recentRevenue - previousRevenue) / previousRevenue) * 100).toFixed(1)
             : '0.0';
         
+        // Calculate today and yesterday revenue
+        const todayKey = today.toISOString().split('T')[0];
+        const yesterday = new Date(today);
+        yesterday.setDate(yesterday.getDate() - 1);
+        const yesterdayKey = yesterday.toISOString().split('T')[0];
+        
+        const todayRevenue = Math.round(dailySales.get(todayKey)?.revenue || 0);
+        const yesterdayRevenue = Math.round(dailySales.get(yesterdayKey)?.revenue || 0);
+        
+        // Format recent activity from charges
+        const recentActivity = [];
+        const now = Date.now();
+        
+        if (stripeData?.recentCharges) {
+            stripeData.recentCharges.forEach(charge => {
+                if (charge.paid && !charge.refunded) {
+                    const chargeTime = charge.created * 1000;
+                    const minutesAgo = Math.floor((now - chargeTime) / 60000);
+                    let timeAgo;
+                    if (minutesAgo < 60) {
+                        timeAgo = `${minutesAgo}m ago`;
+                    } else if (minutesAgo < 1440) {
+                        timeAgo = `${Math.floor(minutesAgo / 60)}h ago`;
+                    } else {
+                        timeAgo = `${Math.floor(minutesAgo / 1440)}d ago`;
+                    }
+                    
+                    const sourceCurrency = (charge.currency || 'usd').toUpperCase();
+                    let amount = charge.amount / 100;
+                    // Convert to USD if source is not USD
+                    if (sourceCurrency !== 'USD' && this.exchangeRates[sourceCurrency]) {
+                        amount = amount / this.exchangeRates[sourceCurrency];
+                    }
+                    
+                    recentActivity.push({
+                        time: chargeTime,
+                        timeAgo,
+                        amount,
+                        description: charge.description || 'Payment',
+                        source: 'stripe'
+                    });
+                }
+            });
+        }
+        
+        if (paypalData?.transactions) {
+            paypalData.transactions.forEach(transaction => {
+                if (transaction.transaction_info?.transaction_status === 'S') {
+                    const txTime = new Date(transaction.transaction_info.transaction_initiation_date).getTime();
+                    const minutesAgo = Math.floor((now - txTime) / 60000);
+                    let timeAgo;
+                    if (minutesAgo < 60) {
+                        timeAgo = `${minutesAgo}m ago`;
+                    } else if (minutesAgo < 1440) {
+                        timeAgo = `${Math.floor(minutesAgo / 60)}h ago`;
+                    } else {
+                        timeAgo = `${Math.floor(minutesAgo / 1440)}d ago`;
+                    }
+                    
+                    const sourceCurrency = (transaction.transaction_info?.transaction_amount?.currency_code || 'USD').toUpperCase();
+                    let amount = Math.abs(parseFloat(transaction.transaction_info?.transaction_amount?.value || 0));
+                    // Convert to USD if source is not USD
+                    if (sourceCurrency !== 'USD' && this.exchangeRates[sourceCurrency]) {
+                        amount = amount / this.exchangeRates[sourceCurrency];
+                    }
+                    
+                    recentActivity.push({
+                        time: txTime,
+                        timeAgo,
+                        amount,
+                        description: transaction.transaction_info?.transaction_type || 'Payment',
+                        source: 'paypal'
+                    });
+                }
+            });
+        }
+        
+        // Sort by time (most recent first)
+        recentActivity.sort((a, b) => b.time - a.time);
+        
         // Mock conversion rate (would need traffic data for real calculation)
         const conversionRate = (Math.random() * 2 + 1.5).toFixed(2);
         
+        // Apply currency conversion to all amounts
         return {
-            revenue: Math.round(totalRevenue),
+            revenue: Math.round(this.convertCurrency(totalRevenue)),
             orders: totalOrders,
-            avgOrderValue,
+            avgOrderValue: Math.round(this.convertCurrency(avgOrderValue)),
             conversionRate,
             growth,
+            todayRevenue: Math.round(this.convertCurrency(todayRevenue)),
+            yesterdayRevenue: Math.round(this.convertCurrency(yesterdayRevenue)),
             labels,
-            revenueData: revenueData.map(v => Math.round(v)),
-            stripeBalance: Math.round(stripeBalance),
-            paypalBalance: Math.round(paypalBalance),
-            dailySales: Array.from(dailySales.values())
+            revenueData: revenueData.map(v => Math.round(this.convertCurrency(v))),
+            stripeBalance: Math.round(this.convertCurrency(stripeBalance)),
+            paypalBalance: Math.round(this.convertCurrency(paypalBalance)),
+            dailySales: Array.from(dailySales.values()),
+            recentActivity: recentActivity.slice(0, 20).map(activity => ({
+                ...activity,
+                amount: this.convertCurrency(activity.amount)
+            }))
         };
     }
 
@@ -1144,20 +1515,17 @@ class PaymentDashboard {
             await this.renderDashboard();
         });
 
-        // Refresh button - fetches fresh data from APIs
-        document.getElementById('refreshBtn').addEventListener('click', async () => {
-            this.showLoading();
-            // Clear cached data to fetch fresh from APIs
-            this.projectsData.clear();
-            try {
-                await this.renderDashboard();
-                this.showNotification('Dashboard refreshed with latest data!');
-            } catch (error) {
-                console.error('Refresh failed:', error);
-                this.showNotification('Refresh failed - check console', 'error');
-            }
-            this.hideLoading();
+        // Currency control
+        document.getElementById('currencySelect').addEventListener('change', async (e) => {
+            this.preferredCurrency = e.target.value;
+            this.savePreferences();
+            await this.fetchExchangeRates();
+            await this.renderDashboard();
+            this.showNotification(`Currency changed to ${this.preferredCurrency}`);
         });
+
+        // Set initial currency selector value
+        document.getElementById('currencySelect').value = this.preferredCurrency;
 
         // Reset layout button
         document.getElementById('resetLayoutBtn').addEventListener('click', async () => {

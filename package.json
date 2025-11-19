@@ -1,6 +1,6 @@
 {
   "name": "stripe-view",
-  "version": "1.0.0",
+  "version": "0.0.2",
   "description": "Payment dashboard with Stripe and PayPal integration",
   "main": "src/server.js",
   "bin": "src/server.js",

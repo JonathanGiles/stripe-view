@@ -1,4 +1,4 @@
-name: Build Executables
+name: Build Windows Executable
 
 on:
   push:
@@ -9,7 +9,7 @@ on:
   workflow_dispatch:
 
 jobs:
-  build-windows:
+  build:
     runs-on: windows-latest
     
     steps:
@@ -55,78 +55,11 @@ jobs:
           name: stripe-view-windows
           path: release/
       
-  build-mac:
-    runs-on: macos-latest
-    
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-      
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '23'
-      
-      - name: Install dependencies
-        run: npm ci
-      
-      - name: Build executable
-        run: npx pkg . --targets node18-macos-x64 --output dist/stripe-view-mac
-      
-      - name: Create release package
-        run: |
-          mkdir -p release
-          cp dist/stripe-view-mac release/
-          chmod +x release/stripe-view-mac
-          echo '{"projects":[]}' > release/config.json
-          echo '{}' > release/view.json
-          cat > release/README.txt << 'EOF'
-          Stripe View Dashboard
-          ======================
-
-          QUICK START:
-          1. Edit config.json with your API credentials
-          2. Run ./stripe-view-mac in Terminal
-          3. Your browser will open to http://localhost:3000
-
-          To stop: Press Ctrl+C in the terminal
-
-          FILES:
-          - stripe-view-mac: The application (run in Terminal)
-          - config.json: Your API credentials (edit this file)
-          - view.json: Saved layout preferences (auto-generated)
-          EOF
-      
-      - name: Upload artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: stripe-view-macos
-          path: release/
-
-  release:
-    needs: [build-windows, build-mac]
-    runs-on: ubuntu-latest
-    if: startsWith(github.ref, 'refs/tags/')
-    
-    steps:
-      - name: Download Windows artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: stripe-view-windows
-          path: windows-release/
-      
-      - name: Download macOS artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: stripe-view-macos
-          path: macos-release/
-      
       - name: Create Release
+        if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v1
         with:
-          files: |
-            windows-release/*
-            macos-release/*
+          files: release/*
           draft: false
           prerelease: false
         env:

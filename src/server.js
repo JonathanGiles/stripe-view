@@ -1,7 +1,12 @@
 /**
- * Backend proxy server for Stripe API calls
+ * Backend proxy server for Stripe/PayPal API calls
  * Uses official Stripe Node.js SDK
  * Run with: node server.js
+ * 
+ * NOTE: Webhooks are not supported in this desktop application.
+ * Webhooks require a publicly accessible URL that Stripe/PayPal can reach.
+ * Since this runs locally, we use polling (refresh button) instead.
+ * For real-time updates, consider deploying as a web service with a public endpoint.
  */
 
 const express = require('express');
@@ -23,6 +28,23 @@ console.log(`Base directory: ${baseDir}`);
 // Enable CORS for frontend
 app.use(cors());
 app.use(express.json());
+
+/**
+ * Endpoint to save view preferences
+ * POST /api/save-view
+ * Body: { layout, preferences }
+ */
+app.post('/api/save-view', async (req, res) => {
+    try {
+        const viewPath = path.join(baseDir, 'view.json');
+        await fs.writeFile(viewPath, JSON.stringify(req.body, null, 2));
+        console.log('✅ Saved view.json');
+        res.json({ success: true });
+    } catch (error) {
+        console.error('Error saving view.json:', error);
+        res.status(500).json({ error: error.message });
+    }
+});
 
 // Serve static files
 if (isPkg) {
@@ -55,10 +77,16 @@ app.post('/api/stripe/data', async (req, res) => {
         // Initialize Stripe with the provided key
         const stripe = new Stripe(apiKey);
 
-        // Fetch charges from the past 30 days
+        // Fetch charges from the past 30 days for charts
         const charges = await stripe.charges.list({
             limit: 100,
             created: { gte: startTimestamp }
+        });
+
+        // Also fetch recent charges for activity feed (last 24 hours)
+        const recentCharges = await stripe.charges.list({
+            limit: 50,
+            created: { gte: Math.floor(Date.now() / 1000) - 86400 } // Last 24 hours
         });
 
         // Fetch balance
@@ -71,6 +99,7 @@ app.post('/api/stripe/data', async (req, res) => {
 
         res.json({
             charges: charges.data,
+            recentCharges: recentCharges.data,
             balance: balance
         });
 
