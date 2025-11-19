@@ -55,14 +55,14 @@ echo "💾 Committing version change..."
 git add package.json
 git commit -m "v$VERSION release"
 
-# Create tag
+# Create tag (force overwrite if it exists)
 echo "🏷️  Creating tag v$VERSION..."
-git tag "v$VERSION"
+git tag -f "v$VERSION"
 
 # Push commit and tag together atomically (avoids double build)
 echo "⬆️  Pushing to GitHub..."
 git push origin main
-git push origin "v$VERSION"
+git push -f origin "v$VERSION"
 
 echo ""
 echo "✅ Release v$VERSION complete!"
