@@ -11,6 +11,8 @@ class PaymentDashboard {
         this.sortBy = 'default';
         this.filterBy = 'all';
         this.preferredCurrency = 'NZD';
+        this.themeMode = 'light'; // 'light' or 'dark'
+        this.themeColor = 'purple'; // 'purple', 'blue', 'green', 'red', 'orange', 'yellow'
         this.exchangeRates = {};
         this.pollingInterval = null;
         this.lastSalesCount = new Map(); // Track sales count per project for change detection
@@ -199,12 +201,15 @@ class PaymentDashboard {
     loadPreferences() {
         // Load from view.json (already loaded in loadViewLayout)
         if (this.viewLayout && this.viewLayout.preferences) {
-            const { viewMode, sortBy, filterBy, preferredCurrency } = this.viewLayout.preferences;
+            const { viewMode, sortBy, filterBy, preferredCurrency, themeMode, themeColor } = this.viewLayout.preferences;
             this.viewMode = viewMode || 'compact';
             this.sortBy = sortBy || 'default';
             this.filterBy = filterBy || 'all';
             this.preferredCurrency = preferredCurrency || 'NZD';
+            this.themeMode = themeMode || 'light';
+            this.themeColor = themeColor || 'purple';
         }
+        this.applyTheme();
     }
 
     savePreferences() {
@@ -225,7 +230,9 @@ class PaymentDashboard {
                     viewMode: this.viewMode,
                     sortBy: this.sortBy,
                     filterBy: this.filterBy,
-                    preferredCurrency: this.preferredCurrency
+                    preferredCurrency: this.preferredCurrency,
+                    themeMode: this.themeMode,
+                    themeColor: this.themeColor
                 }
             };
 
@@ -244,6 +251,34 @@ class PaymentDashboard {
             console.error('Failed to save layout:', error);
             this.showNotification('Failed to save layout', 'error');
         }
+    }
+
+    applyTheme() {
+        const root = document.documentElement;
+        root.setAttribute('data-theme-mode', this.themeMode);
+        root.setAttribute('data-theme-color', this.themeColor);
+        
+        // Update active states in UI
+        document.querySelectorAll('.btn-theme-mode').forEach(btn => {
+            btn.classList.toggle('active', btn.dataset.mode === this.themeMode);
+        });
+        document.querySelectorAll('.theme-color-btn').forEach(btn => {
+            btn.classList.toggle('active', btn.dataset.color === this.themeColor);
+        });
+        
+        console.log(`✓ Theme applied: ${this.themeMode} mode, ${this.themeColor} color`);
+    }
+
+    getThemeColors() {
+        const root = document.documentElement;
+        const styles = getComputedStyle(root);
+        const primary = styles.getPropertyValue('--theme-primary').trim();
+        const primaryRgb = styles.getPropertyValue('--theme-primary-rgb').trim();
+        
+        return {
+            primary: primary,
+            primaryRgba: (alpha) => `rgba(${primaryRgb}, ${alpha})`
+        };
     }
 
     async renderDashboard() {
@@ -436,6 +471,7 @@ class PaymentDashboard {
         const ctx = document.getElementById('overviewChart').getContext('2d');
         const currencySymbol = this.preferredCurrency === 'EUR' ? '€' : 
                               this.preferredCurrency === 'GBP' ? '£' : '$';
+        const themeColors = this.getThemeColors();
         
         this.overviewChart = new Chart(ctx, {
             type: 'line',
@@ -444,14 +480,14 @@ class PaymentDashboard {
                 datasets: [{
                     label: `Revenue (${this.preferredCurrency})`,
                     data: revenueData,
-                    borderColor: '#667eea',
-                    backgroundColor: 'rgba(102, 126, 234, 0.1)',
+                    borderColor: themeColors.primary,
+                    backgroundColor: themeColors.primaryRgba(0.1),
                     borderWidth: 3,
                     fill: true,
                     tension: 0.4,
                     pointRadius: 2,
                     pointHoverRadius: 5,
-                    pointBackgroundColor: '#667eea',
+                    pointBackgroundColor: themeColors.primary,
                     pointBorderColor: '#fff',
                     pointBorderWidth: 2
                 }]
@@ -472,7 +508,7 @@ class PaymentDashboard {
                         padding: 12,
                         titleColor: '#fff',
                         bodyColor: '#fff',
-                        borderColor: '#667eea',
+                        borderColor: themeColors.primary,
                         borderWidth: 1,
                         displayColors: false,
                         callbacks: {
@@ -491,10 +527,11 @@ class PaymentDashboard {
                             },
                             font: {
                                 size: 11
-                            }
+                            },
+                            color: this.themeMode === 'dark' ? '#9ca3af' : '#6B7280'
                         },
                         grid: {
-                            color: 'rgba(0, 0, 0, 0.05)'
+                            color: this.themeMode === 'dark' ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.05)'
                         }
                     },
                     x: {
@@ -503,7 +540,8 @@ class PaymentDashboard {
                                 size: 10
                             },
                             maxRotation: 45,
-                            minRotation: 45
+                            minRotation: 45,
+                            color: this.themeMode === 'dark' ? '#9ca3af' : '#6B7280'
                         },
                         grid: {
                             display: false
@@ -859,6 +897,7 @@ class PaymentDashboard {
         }
 
         const isCompact = this.viewMode === 'compact';
+        const themeColors = this.getThemeColors();
         
         this.charts[project.id] = new Chart(ctx, {
             type: 'line',
@@ -867,8 +906,8 @@ class PaymentDashboard {
                 datasets: [{
                     label: 'Daily Sales (Past 30 Days)',
                     data: salesData.revenueData,
-                    borderColor: project.stripe?.enabled ? '#635BFF' : '#0070BA',
-                    backgroundColor: project.stripe?.enabled ? 'rgba(99, 91, 255, 0.1)' : 'rgba(0, 112, 186, 0.1)',
+                    borderColor: themeColors.primary,
+                    backgroundColor: themeColors.primaryRgba(0.1),
                     tension: 0.4,
                     fill: true,
                     borderWidth: isCompact ? 2 : 2.5,
@@ -904,14 +943,15 @@ class PaymentDashboard {
                         display: !isCompact,
                         beginAtZero: true,
                         grid: {
-                            color: 'rgba(0, 0, 0, 0.05)',
+                            color: this.themeMode === 'dark' ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.05)',
                             display: !isCompact
                         },
                         ticks: {
                             display: !isCompact,
                             callback: function(value) {
                                 return '$' + value.toLocaleString();
-                            }
+                            },
+                            color: this.themeMode === 'dark' ? '#9ca3af' : '#6B7280'
                         }
                     },
                     x: {
@@ -920,7 +960,8 @@ class PaymentDashboard {
                             display: false
                         },
                         ticks: {
-                            display: !isCompact
+                            display: !isCompact,
+                            color: this.themeMode === 'dark' ? '#9ca3af' : '#6B7280'
                         }
                     }
                 },
@@ -1535,6 +1576,28 @@ class PaymentDashboard {
 
         // Set initial currency selector value
         document.getElementById('currencySelect').value = this.preferredCurrency;
+
+        // Theme mode toggles
+        document.querySelectorAll('.btn-theme-mode').forEach(btn => {
+            btn.addEventListener('click', async () => {
+                this.themeMode = btn.dataset.mode;
+                this.applyTheme();
+                this.savePreferences();
+                await this.renderDashboard();
+                this.showNotification(`Switched to ${this.themeMode} mode`);
+            });
+        });
+
+        // Theme color selection
+        document.querySelectorAll('.theme-color-btn').forEach(btn => {
+            btn.addEventListener('click', async () => {
+                this.themeColor = btn.dataset.color;
+                this.applyTheme();
+                this.savePreferences();
+                await this.renderDashboard();
+                this.showNotification(`Theme color changed to ${this.themeColor}`);
+            });
+        });
 
         // Settings blade toggle
         const settingsBtn = document.getElementById('settingsBtn');
