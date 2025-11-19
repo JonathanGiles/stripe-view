@@ -2,8 +2,6 @@ name: Build Windows Executable
 
 on:
   push:
-    branches:
-      - main
     tags:
       - 'v*'
   workflow_dispatch:
@@ -32,8 +30,14 @@ jobs:
       
       - name: Convert to GUI app (hide console)
         run: |
-          curl -L -o rcedit.exe https://github.com/electron/rcedit/releases/download/v2.0.0/rcedit-x64.exe
-          .\rcedit.exe dist\stripe-view-win.exe --set-subsystem windows
+          # Download and use editbin.exe (PE editor)
+          $editbinPath = (Get-ChildItem -Path "C:\Program Files\Microsoft Visual Studio" -Recurse -Filter "editbin.exe" | Select-Object -First 1).FullName
+          if ($editbinPath) {
+            Write-Host "Using editbin at: $editbinPath"
+            & $editbinPath /SUBSYSTEM:WINDOWS dist\stripe-view-win.exe
+          } else {
+            Write-Host "Warning: editbin.exe not found, executable will show console window"
+          }
         shell: pwsh
       
       - name: Create release package
