@@ -248,7 +248,6 @@ class PaymentDashboard {
             console.log('Layout saved to view.json:', layoutData);
         } catch (error) {
             console.error('Failed to save layout:', error);
-            this.showNotification('Failed to save layout', 'error');
         }
     }
 
@@ -1546,7 +1545,6 @@ class PaymentDashboard {
             document.getElementById('compactViewBtn').classList.add('active');
             this.savePreferences();
             await this.renderDashboard();
-            this.showNotification('Switched to compact view');
         });
 
         document.getElementById('detailedViewBtn').addEventListener('click', async () => {
@@ -1555,7 +1553,6 @@ class PaymentDashboard {
             document.getElementById('detailedViewBtn').classList.add('active');
             this.savePreferences();
             await this.renderDashboard();
-            this.showNotification('Switched to detailed view');
         });
 
         // Set initial selector values
@@ -1584,7 +1581,6 @@ class PaymentDashboard {
             await this.fetchExchangeRates();
             // Force refetch to recalculate with new currency
             await this.renderDashboard(true);
-            this.showNotification(`Currency changed to ${this.preferredCurrency}`);
         });
 
         // Theme mode toggles
@@ -1594,7 +1590,6 @@ class PaymentDashboard {
                 this.applyTheme();
                 this.savePreferences();
                 await this.renderDashboard();
-                this.showNotification(`Switched to ${this.themeMode} mode`);
             });
         });
 
@@ -1605,7 +1600,6 @@ class PaymentDashboard {
                 this.applyTheme();
                 this.savePreferences();
                 await this.renderDashboard();
-                this.showNotification(`Theme color changed to ${this.themeColor}`);
             });
         });
 
@@ -1655,56 +1649,11 @@ class PaymentDashboard {
         `;
     }
 
-    showNotification(message, type = 'success') {
-        const notification = document.createElement('div');
-        notification.style.cssText = `
-            position: fixed;
-            top: 20px;
-            right: 20px;
-            background: ${type === 'success' ? '#10B981' : '#EF4444'};
-            color: white;
-            padding: 1rem 1.5rem;
-            border-radius: 8px;
-            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
-            z-index: 10000;
-            animation: slideIn 0.3s ease-out;
-        `;
-        notification.textContent = message;
-        
-        document.body.appendChild(notification);
-        
-        setTimeout(() => {
-            notification.style.animation = 'slideOut 0.3s ease-out';
-            setTimeout(() => notification.remove(), 300);
-        }, 3000);
-    }
 }
 
-// Add animation styles
+// Add drag-over style
 const style = document.createElement('style');
 style.textContent = `
-    @keyframes slideIn {
-        from {
-            transform: translateX(400px);
-            opacity: 0;
-        }
-        to {
-            transform: translateX(0);
-            opacity: 1;
-        }
-    }
-    
-    @keyframes slideOut {
-        from {
-            transform: translateX(0);
-            opacity: 1;
-        }
-        to {
-            transform: translateX(400px);
-            opacity: 0;
-        }
-    }
-    
     .drag-over {
         border: 2px dashed var(--primary-color);
         opacity: 0.7;
