@@ -20,7 +20,6 @@ class PaymentDashboard {
         this.overviewChart = null; // Store overview chart instance
         this.projectsData = new Map();
         
-        this.loadPreferences();
         this.init();
     }
 
@@ -28,6 +27,7 @@ class PaymentDashboard {
         try {
             await this.loadConfig();
             await this.loadViewLayout();
+            this.loadPreferences(); // Load preferences after viewLayout is loaded
             await this.fetchExchangeRates();
             await this.renderDashboard();
             this.setupEventListeners();
@@ -246,7 +246,6 @@ class PaymentDashboard {
             if (!response.ok) throw new Error('Failed to save to server');
             
             console.log('Layout saved to view.json:', layoutData);
-            this.showNotification('Layout saved successfully!');
         } catch (error) {
             console.error('Failed to save layout:', error);
             this.showNotification('Failed to save layout', 'error');
@@ -300,9 +299,11 @@ class PaymentDashboard {
         });
 
         // Fetch data for all projects asynchronously and update widgets as they complete
+        const shouldRefetch = arguments[0] === true; // Allow forcing refetch
+        
         this.config.projects.forEach(async (project) => {
             try {
-                if (!this.projectsData.has(project.id)) {
+                if (shouldRefetch || !this.projectsData.has(project.id)) {
                     const data = await this.fetchProjectSalesData(project);
                     this.projectsData.set(project.id, data);
                 }
@@ -436,7 +437,8 @@ class PaymentDashboard {
         for (let i = 29; i >= 0; i--) {
             const date = new Date(today);
             date.setDate(date.getDate() - i);
-            const dateKey = date.toISOString().split('T')[0];
+            // Use local date to avoid timezone issues
+            const dateKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
             const label = date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
             labels.push(label);
             combinedData.set(dateKey, 0);
@@ -450,7 +452,8 @@ class PaymentDashboard {
                     const daysBack = 29 - index;
                     const date = new Date(today);
                     date.setDate(date.getDate() - daysBack);
-                    const dateKey = date.toISOString().split('T')[0];
+                    // Use local date to avoid timezone issues
+                    const dateKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
                     
                     if (combinedData.has(dateKey)) {
                         combinedData.set(dateKey, combinedData.get(dateKey) + revenue);
@@ -587,12 +590,8 @@ class PaymentDashboard {
             <div class="widget-header">
                 <div>
                     <h2 class="widget-title">
-                        <span class="health-indicator ${healthStatus}">${healthIcon}</span>
                         ${project.name}
-                        ${isTop ? '<span class="performance-badge top">Top</span>' : ''}
-                        ${isBottom ? '<span class="performance-badge bottom">Low</span>' : ''}
                     </h2>
-                    <span class="provider-badge ${providerClass}">${providerText}</span>
                 </div>
                 <div class="widget-drag-handle" title="Drag to reorder">⋮⋮</div>
             </div>
@@ -676,7 +675,6 @@ class PaymentDashboard {
             <div class="widget-header">
                 <div>
                     <h2 class="widget-title">${project.name}</h2>
-                    <span class="provider-badge ${providerClass}">${providerText}</span>
                 </div>
             </div>
             <div class="widget-content">
@@ -745,12 +743,8 @@ class PaymentDashboard {
             <div class="widget-header">
                 <div>
                     <h2 class="widget-title">
-                        <span class="health-indicator ${healthStatus}">${healthIcon}</span>
                         ${project.name}
-                        ${isTop ? '<span class="performance-badge top">Top</span>' : ''}
-                        ${isBottom ? '<span class="performance-badge bottom">Low</span>' : ''}
                     </h2>
-                    <span class="provider-badge ${providerClass}">${providerText}</span>
                 </div>
                 <div class="widget-drag-handle" title="Drag to reorder">⋮⋮</div>
             </div>
@@ -827,7 +821,6 @@ class PaymentDashboard {
             <div class="widget-header">
                 <div>
                     <h2 class="widget-title">🔴 ${project.name}</h2>
-                    <span class="provider-badge ${providerClass}">${providerText}</span>
                 </div>
             </div>
             <div class="widget-content">
@@ -858,7 +851,6 @@ class PaymentDashboard {
                     <h2 class="widget-title">
                         🔴 ${project.name}
                     </h2>
-                    <span class="provider-badge ${providerClass}">${providerText}</span>
                 </div>
             </div>
             <div class="widget-content">
@@ -984,7 +976,8 @@ class PaymentDashboard {
 
         const today = new Date();
         const firstOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
-        const todayDateKey = today.toISOString().split('T')[0];
+        // Use local date to avoid timezone issues
+        const todayDateKey = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
 
         projects.forEach(project => {
             const salesData = this.projectsData.get(project.id);
@@ -1170,7 +1163,8 @@ class PaymentDashboard {
         for (let i = 29; i >= 0; i--) {
             const date = new Date(today);
             date.setDate(date.getDate() - i);
-            const dateKey = date.toISOString().split('T')[0];
+            // Use local date to avoid timezone issues
+            const dateKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
             dailySales.set(dateKey, {
                 amounts: [], // Store {amount, currency} objects
                 orders: 0
@@ -1188,7 +1182,8 @@ class PaymentDashboard {
             stripeData.charges.forEach(charge => {
                 if (charge.paid && !charge.refunded) {
                     const date = new Date(charge.created * 1000);
-                    const dateKey = date.toISOString().split('T')[0];
+                    // Use local date to avoid timezone issues
+                    const dateKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
                     const currency = (charge.currency || 'usd').toUpperCase();
                     const amount = charge.amount / 100; // Convert from cents
                     
@@ -1216,7 +1211,8 @@ class PaymentDashboard {
             paypalData.transactions.forEach(transaction => {
                 if (transaction.transaction_info?.transaction_status === 'S') { // Success
                     const date = new Date(transaction.transaction_info.transaction_initiation_date);
-                    const dateKey = date.toISOString().split('T')[0];
+                    // Use local date to avoid timezone issues
+                    const dateKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
                     const currency = (transaction.transaction_info?.transaction_amount?.currency_code || 'USD').toUpperCase();
                     const amount = Math.abs(parseFloat(transaction.transaction_info?.transaction_amount?.value || 0));
                     
@@ -1276,10 +1272,11 @@ class PaymentDashboard {
             : '0.0';
         
         // Calculate today and yesterday revenue (already converted)
-        const todayKey = today.toISOString().split('T')[0];
+        // Use local date to avoid timezone issues
+        const todayKey = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
         const yesterday = new Date(today);
         yesterday.setDate(yesterday.getDate() - 1);
-        const yesterdayKey = yesterday.toISOString().split('T')[0];
+        const yesterdayKey = `${yesterday.getFullYear()}-${String(yesterday.getMonth() + 1).padStart(2, '0')}-${String(yesterday.getDate()).padStart(2, '0')}`;
         
         const todayRevenue = Math.round(revenueData[revenueData.length - 1] || 0);
         const yesterdayRevenue = Math.round(revenueData[revenueData.length - 2] || 0);
@@ -1536,9 +1533,17 @@ class PaymentDashboard {
     }
 
     setupEventListeners() {
+        // Set initial UI states
+        document.querySelectorAll('.btn-view-mode').forEach(btn => {
+            btn.classList.remove('active');
+        });
+        document.getElementById(this.viewMode === 'compact' ? 'compactViewBtn' : 'detailedViewBtn').classList.add('active');
+        
         // View mode toggle
         document.getElementById('compactViewBtn').addEventListener('click', async () => {
             this.viewMode = 'compact';
+            document.querySelectorAll('.btn-view-mode').forEach(btn => btn.classList.remove('active'));
+            document.getElementById('compactViewBtn').classList.add('active');
             this.savePreferences();
             await this.renderDashboard();
             this.showNotification('Switched to compact view');
@@ -1546,11 +1551,18 @@ class PaymentDashboard {
 
         document.getElementById('detailedViewBtn').addEventListener('click', async () => {
             this.viewMode = 'detailed';
+            document.querySelectorAll('.btn-view-mode').forEach(btn => btn.classList.remove('active'));
+            document.getElementById('detailedViewBtn').classList.add('active');
             this.savePreferences();
             await this.renderDashboard();
             this.showNotification('Switched to detailed view');
         });
 
+        // Set initial selector values
+        document.getElementById('sortSelect').value = this.sortBy;
+        document.getElementById('filterSelect').value = this.filterBy;
+        document.getElementById('currencySelect').value = this.preferredCurrency;
+        
         // Sort control
         document.getElementById('sortSelect').addEventListener('change', async (e) => {
             this.sortBy = e.target.value;
@@ -1570,12 +1582,10 @@ class PaymentDashboard {
             this.preferredCurrency = e.target.value;
             this.savePreferences();
             await this.fetchExchangeRates();
-            await this.renderDashboard();
+            // Force refetch to recalculate with new currency
+            await this.renderDashboard(true);
             this.showNotification(`Currency changed to ${this.preferredCurrency}`);
         });
-
-        // Set initial currency selector value
-        document.getElementById('currencySelect').value = this.preferredCurrency;
 
         // Theme mode toggles
         document.querySelectorAll('.btn-theme-mode').forEach(btn => {

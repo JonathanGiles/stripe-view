@@ -433,15 +433,29 @@ body {
 
 .widget-container {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(450px, 1fr));
+    max-width: 100%;
     gap: 0.75rem;
     align-items: start;
 }
 
+/* Limit to 2 columns maximum */
+@media (min-width: 1400px) {
+    .widget-container {
+        grid-template-columns: repeat(2, 1fr);
+    }
+}
+
 /* Compact View */
 .widget-container.compact-view {
-    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
     gap: 0.5rem;
+}
+
+@media (min-width: 1400px) {
+    .widget-container.compact-view {
+        grid-template-columns: repeat(2, 1fr);
+    }
 }
 
 .widget-container.compact-view .widget {
