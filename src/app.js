@@ -128,12 +128,58 @@ class PaymentDashboard {
         try {
             console.log('🔄 Background refresh...');
             const oldProjectsData = new Map(this.projectsData);
+            let hasChanges = false;
             
-            // Clear cached data to fetch fresh from APIs
-            this.projectsData.clear();
+            // Fetch fresh data for each project
+            const fetchPromises = this.config.projects.map(async (project) => {
+                try {
+                    const newData = await this.fetchProjectSalesData(project);
+                    const oldData = oldProjectsData.get(project.id);
+                    
+                    // Check if data actually changed (compare key metrics)
+                    const dataChanged = !oldData || 
+                        oldData.revenue !== newData.revenue ||
+                        oldData.todayRevenue !== newData.todayRevenue ||
+                        oldData.sales !== newData.sales ||
+                        oldData.stripeBalance !== newData.stripeBalance ||
+                        oldData.paypalBalance !== newData.paypalBalance ||
+                        JSON.stringify(oldData.revenueData) !== JSON.stringify(newData.revenueData);
+                    
+                    if (dataChanged) {
+                        console.log(`📊 Data changed for ${project.name}:`, {
+                            revenue: oldData?.revenue !== newData.revenue ? `${oldData?.revenue} → ${newData.revenue}` : 'unchanged',
+                            today: oldData?.todayRevenue !== newData.todayRevenue ? `${oldData?.todayRevenue} → ${newData.todayRevenue}` : 'unchanged',
+                            sales: oldData?.sales !== newData.sales ? `${oldData?.sales} → ${newData.sales}` : 'unchanged'
+                        });
+                        this.projectsData.set(project.id, newData);
+                        hasChanges = true;
+                        
+                        // Update only this project's widget
+                        this.updateProjectWidget(project);
+                    } else {
+                        console.log(`✓ No changes for ${project.name}, skipping UI update`);
+                        // Keep existing data in cache (it's already there)
+                        this.projectsData.set(project.id, oldData);
+                    }
+                    
+                    return { project, changed: dataChanged };
+                } catch (error) {
+                    console.error(`Failed to fetch data for ${project.name}:`, error);
+                    this.updateProjectWidget(project, error);
+                    return { project, changed: false };
+                }
+            });
             
-            // Re-fetch all project data
-            await this.renderDashboard();
+            await Promise.all(fetchPromises);
+            
+            // Only update summary/overview if any data changed
+            if (hasChanges) {
+                console.log('📈 Updating summary and overview (data changed)');
+                this.renderSummarySection(this.config.projects);
+                this.renderOverviewGraph(this.config.projects);
+            } else {
+                console.log('✓ No data changes detected, UI unchanged');
+            }
             
             // Update refresh time and restart countdown
             this.lastRefreshTime = Date.now();
@@ -833,9 +879,21 @@ class PaymentDashboard {
         const todayChange = yesterday > 0 ? (((today - yesterday) / yesterday) * 100).toFixed(1) : '0.0';
         const todayTrend = parseFloat(todayChange) > 0 ? 'up' : parseFloat(todayChange) < 0 ? 'down' : 'flat';
         
+        // Generate favicon URL directly from Google's service
+        let faviconHtml = '';
+        if (project.website) {
+            try {
+                const domain = new URL(project.website).hostname;
+                faviconHtml = `<img src="https://www.google.com/s2/favicons?domain=${domain}&sz=128" class="project-favicon" alt="" onerror="this.style.display='none'">`;
+            } catch (err) {
+                // Invalid URL, skip favicon
+            }
+        }
+        
         return `
             <div class="widget-header">
-                <div>
+                <div class="widget-title-container">
+                    ${faviconHtml}
                     <h2 class="widget-title">
                         ${project.name}
                     </h2>
@@ -1375,6 +1433,7 @@ class PaymentDashboard {
                 ];
                 
                 // Log for verification
+                console.log('🔍 RAW Stripe Balance Data:', JSON.stringify(stripeData.balance, null, 2));
                 const availableTotal = (stripeData.balance.available || []).reduce((sum, b) => sum + b.amount / 100, 0);
                 const pendingTotal = (stripeData.balance.pending || []).reduce((sum, b) => sum + b.amount / 100, 0);
                 console.log(`Stripe Balance Calculation: Available $${availableTotal.toLocaleString()} + Pending $${pendingTotal.toLocaleString()} = Total $${(availableTotal + pendingTotal).toLocaleString()}`);
@@ -1384,6 +1443,7 @@ class PaymentDashboard {
                 allBalances.forEach(bal => {
                     const currency = (bal.currency || 'usd').toUpperCase();
                     const amount = bal.amount / 100;
+                    console.log(`  - Balance: ${amount} ${currency} (raw: ${bal.amount} cents)`);
                     balanceByCurrency.set(
                         currency, 
                         (balanceByCurrency.get(currency) || 0) + amount
@@ -1392,6 +1452,7 @@ class PaymentDashboard {
                 
                 // Convert to array
                 balanceByCurrency.forEach((amount, currency) => {
+                    console.log(`  → Total in ${currency}: ${amount.toLocaleString()}`);
                     stripeBalances.push({ amount, currency });
                 });
             }
@@ -1448,9 +1509,13 @@ class PaymentDashboard {
         const avgOrderValue = totalOrders > 0 ? Math.floor(totalRevenue / totalOrders) : 0;
         
         // Calculate balances in display currency
+        console.log(`💱 Converting to display currency (${this.preferredCurrency}):`);
         stripeBalance = stripeBalances.reduce((sum, item) => {
-            return sum + this.convertCurrency(item.amount, item.currency);
+            const converted = this.convertCurrency(item.amount, item.currency);
+            console.log(`  - ${item.amount} ${item.currency} → ${converted.toFixed(2)} ${this.preferredCurrency}`);
+            return sum + converted;
         }, 0);
+        console.log(`  ✓ Final Stripe Balance: ${stripeBalance.toFixed(2)} ${this.preferredCurrency}`);
         
         paypalBalance = paypalBalances.reduce((sum, item) => {
             return sum + this.convertCurrency(item.amount, item.currency);

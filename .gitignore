@@ -7,3 +7,5 @@ view.json
 # Build artifacts
 dist/
 *.exe
+
+.DS_Store
