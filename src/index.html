@@ -24,13 +24,29 @@
                     <span class="live-text">Live</span>
                 </div>
                 <div class="header-controls">
-                <div class="control-group">
-                    <label class="control-label">View:</label>
-                    <button id="compactViewBtn" class="btn btn-view active">⚡ Compact</button>
-                    <button id="detailedViewBtn" class="btn btn-view">📊 Detailed</button>
+                    <button id="settingsBtn" class="btn btn-icon" title="Settings">
+                        <span>⚙️</span>
+                    </button>
                 </div>
-                <div class="control-group">
-                    <label class="control-label">Sort:</label>
+            </div>
+        </header>
+
+        <!-- Settings Blade -->
+        <div id="settingsBlade" class="settings-blade">
+            <div class="settings-blade-header">
+                <h3>Settings</h3>
+                <button id="closeSettingsBtn" class="btn-close">×</button>
+            </div>
+            <div class="settings-blade-content">
+                <div class="settings-group">
+                    <label class="settings-label">View Mode</label>
+                    <div class="view-mode-buttons">
+                        <button id="compactViewBtn" class="btn btn-view-mode active">⚡ Compact</button>
+                        <button id="detailedViewBtn" class="btn btn-view-mode">📊 Detailed</button>
+                    </div>
+                </div>
+                <div class="settings-group">
+                    <label class="settings-label">Sort By</label>
                     <select id="sortSelect" class="select-control">
                         <option value="default">Default Order</option>
                         <option value="revenue-desc">Revenue (High to Low)</option>
@@ -39,8 +55,8 @@
                         <option value="name-asc">Name (A to Z)</option>
                     </select>
                 </div>
-                <div class="control-group">
-                    <label class="control-label">Filter:</label>
+                <div class="settings-group">
+                    <label class="settings-label">Filter</label>
                     <select id="filterSelect" class="select-control">
                         <option value="all">All Projects</option>
                         <option value="stripe">Stripe Only</option>
@@ -48,8 +64,8 @@
                         <option value="both">Both Providers</option>
                     </select>
                 </div>
-                <div class="control-group">
-                    <label class="control-label">Currency:</label>
+                <div class="settings-group">
+                    <label class="settings-label">Currency</label>
                     <select id="currencySelect" class="select-control">
                         <option value="USD">USD ($)</option>
                         <option value="NZD">NZD ($)</option>
@@ -59,10 +75,9 @@
                         <option value="CAD">CAD ($)</option>
                     </select>
                 </div>
-                <button id="resetLayoutBtn" class="btn btn-secondary">↺ Reset</button>
-                </div>
             </div>
-        </header>
+        </div>
+        <div id="settingsOverlay" class="settings-overlay"></div>
 
         <main class="dashboard-main">
             <div id="summarySection" class="summary-section">

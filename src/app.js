@@ -1536,14 +1536,30 @@ class PaymentDashboard {
         // Set initial currency selector value
         document.getElementById('currencySelect').value = this.preferredCurrency;
 
-        // Reset layout button
-        document.getElementById('resetLayoutBtn').addEventListener('click', async () => {
-            if (confirm('Are you sure you want to reset the layout to default?')) {
-                localStorage.removeItem('dashboardLayout');
-                this.showLoading();
-                await this.renderDashboard();
-                this.hideLoading();
-                this.showNotification('Layout reset to default!');
+        // Settings blade toggle
+        const settingsBtn = document.getElementById('settingsBtn');
+        const settingsBlade = document.getElementById('settingsBlade');
+        const settingsOverlay = document.getElementById('settingsOverlay');
+        const closeSettingsBtn = document.getElementById('closeSettingsBtn');
+
+        const openSettings = () => {
+            settingsBlade.classList.add('active');
+            settingsOverlay.classList.add('active');
+        };
+
+        const closeSettings = () => {
+            settingsBlade.classList.remove('active');
+            settingsOverlay.classList.remove('active');
+        };
+
+        settingsBtn.addEventListener('click', openSettings);
+        closeSettingsBtn.addEventListener('click', closeSettings);
+        settingsOverlay.addEventListener('click', closeSettings);
+
+        // Close settings on Escape key
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape' && settingsBlade.classList.contains('active')) {
+                closeSettings();
             }
         });
     }
