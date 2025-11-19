@@ -45,6 +45,7 @@ class PaymentDashboard {
             const data = await response.json();
             this.exchangeRates = data.rates;
             console.log(`✓ Exchange rates loaded (1 USD = ${this.exchangeRates[this.preferredCurrency]} ${this.preferredCurrency})`);
+            console.log(`Available currencies: ${Object.keys(this.exchangeRates).join(', ')}`);
         } catch (error) {
             console.warn('Could not fetch exchange rates, using defaults:', error);
             // Fallback rates if API fails
@@ -59,10 +60,26 @@ class PaymentDashboard {
         }
     }
 
-    convertCurrency(amountUSD) {
-        if (!amountUSD || isNaN(amountUSD)) return 0;
-        const rate = this.exchangeRates[this.preferredCurrency] || 1;
-        return amountUSD * rate;
+    convertCurrency(amount, fromCurrency, toCurrency = null) {
+        if (!amount || isNaN(amount)) return 0;
+        
+        const from = (fromCurrency || 'USD').toUpperCase();
+        const to = (toCurrency || this.preferredCurrency).toUpperCase();
+        
+        // No conversion needed
+        if (from === to) return amount;
+        
+        // Get exchange rates (all rates are relative to USD)
+        const fromRate = this.exchangeRates[from] || 1;
+        const toRate = this.exchangeRates[to] || 1;
+        
+        // Convert: amount in FROM currency -> USD -> TO currency
+        // Step 1: Convert to USD (divide by from rate)
+        // Step 2: Convert to target (multiply by to rate)
+        // Example: 100 NZD to AUD where NZD=1.65, AUD=1.52
+        //   100 / 1.65 = 60.61 USD
+        //   60.61 * 1.52 = 92.12 AUD
+        return (amount / fromRate) * toRate;
     }
 
     startAutoRefresh() {
@@ -147,11 +164,15 @@ class PaymentDashboard {
         }
     }
 
-    formatCurrency(amount) {
-        const converted = this.convertCurrency(amount);
+    formatCurrency(amount, sourceCurrency = null) {
+        // If no source currency specified, assume amount is already in display currency
+        const finalAmount = sourceCurrency 
+            ? this.convertCurrency(amount, sourceCurrency, this.preferredCurrency)
+            : amount;
+        
         const symbol = this.preferredCurrency === 'EUR' ? '€' : 
                       this.preferredCurrency === 'GBP' ? '£' : '$';
-        return `${symbol}${Math.round(converted).toLocaleString()}`;
+        return `${symbol}${Math.round(finalAmount).toLocaleString()}`;
     }
 
     async loadConfig() {
@@ -1110,10 +1131,8 @@ class PaymentDashboard {
             date.setDate(date.getDate() - i);
             const dateKey = date.toISOString().split('T')[0];
             dailySales.set(dateKey, {
-                revenue: 0,
-                orders: 0,
-                stripe: 0,
-                paypal: 0
+                amounts: [], // Store {amount, currency} objects
+                orders: 0
             });
         }
         
@@ -1122,83 +1141,63 @@ class PaymentDashboard {
         let stripeBalance = 0;
         let paypalBalance = 0;
         
-        // Process Stripe charges
+        // Process Stripe charges - store with original currency
+        const stripeBalances = [];
         if (stripeData?.charges) {
             stripeData.charges.forEach(charge => {
                 if (charge.paid && !charge.refunded) {
                     const date = new Date(charge.created * 1000);
                     const dateKey = date.toISOString().split('T')[0];
-                    const sourceCurrency = (charge.currency || 'usd').toUpperCase();
-                    let amount = charge.amount / 100; // Convert from cents
-                    
-                    // Convert to USD if source is not USD
-                    if (sourceCurrency !== 'USD' && this.exchangeRates[sourceCurrency]) {
-                        amount = amount / this.exchangeRates[sourceCurrency];
-                    }
+                    const currency = (charge.currency || 'usd').toUpperCase();
+                    const amount = charge.amount / 100; // Convert from cents
                     
                     if (dailySales.has(dateKey)) {
                         const day = dailySales.get(dateKey);
-                        day.revenue += amount;
-                        day.stripe += amount;
+                        day.amounts.push({ amount, currency });
                         day.orders += 1;
-                        totalRevenue += amount;
                         totalOrders += 1;
                     }
                 }
             });
             
             if (stripeData.balance?.available) {
-                stripeBalance = stripeData.balance.available.reduce((sum, bal) => {
-                    const sourceCurrency = (bal.currency || 'usd').toUpperCase();
-                    let amount = bal.amount / 100;
-                    // Convert to USD if source is not USD
-                    if (sourceCurrency !== 'USD' && this.exchangeRates[sourceCurrency]) {
-                        amount = amount / this.exchangeRates[sourceCurrency];
-                    }
-                    return sum + amount;
-                }, 0);
+                stripeData.balance.available.forEach(bal => {
+                    const currency = (bal.currency || 'usd').toUpperCase();
+                    const amount = bal.amount / 100;
+                    stripeBalances.push({ amount, currency });
+                });
             }
         }
         
-        // Process PayPal transactions
+        // Process PayPal transactions - store with original currency
+        const paypalBalances = [];
         if (paypalData?.transactions) {
             paypalData.transactions.forEach(transaction => {
                 if (transaction.transaction_info?.transaction_status === 'S') { // Success
                     const date = new Date(transaction.transaction_info.transaction_initiation_date);
                     const dateKey = date.toISOString().split('T')[0];
-                    const sourceCurrency = (transaction.transaction_info?.transaction_amount?.currency_code || 'USD').toUpperCase();
-                    let amount = Math.abs(parseFloat(transaction.transaction_info?.transaction_amount?.value || 0));
-                    
-                    // Convert to USD if source is not USD
-                    if (sourceCurrency !== 'USD' && this.exchangeRates[sourceCurrency]) {
-                        amount = amount / this.exchangeRates[sourceCurrency];
-                    }
+                    const currency = (transaction.transaction_info?.transaction_amount?.currency_code || 'USD').toUpperCase();
+                    const amount = Math.abs(parseFloat(transaction.transaction_info?.transaction_amount?.value || 0));
                     
                     if (dailySales.has(dateKey)) {
                         const day = dailySales.get(dateKey);
-                        day.revenue += amount;
-                        day.paypal += amount;
+                        day.amounts.push({ amount, currency });
                         day.orders += 1;
-                        totalRevenue += amount;
                         totalOrders += 1;
                     }
                 }
             });
             
             if (paypalData.balance?.balances) {
-                paypalBalance = paypalData.balance.balances.reduce((sum, bal) => {
-                    const sourceCurrency = (bal.total_balance?.currency_code || 'USD').toUpperCase();
-                    let amount = parseFloat(bal.total_balance?.value || 0);
-                    // Convert to USD if source is not USD
-                    if (sourceCurrency !== 'USD' && this.exchangeRates[sourceCurrency]) {
-                        amount = amount / this.exchangeRates[sourceCurrency];
-                    }
-                    return sum + amount;
-                }, 0);
+                paypalData.balance.balances.forEach(bal => {
+                    const currency = (bal.total_balance?.currency_code || 'USD').toUpperCase();
+                    const amount = parseFloat(bal.total_balance?.value || 0);
+                    paypalBalances.push({ amount, currency });
+                });
             }
         }
         
-        // Convert map to arrays for charting
+        // Convert to display currency at calculation time
         const labels = [];
         const revenueData = [];
         const sortedDates = Array.from(dailySales.keys()).sort();
@@ -1206,11 +1205,27 @@ class PaymentDashboard {
         sortedDates.forEach(dateKey => {
             const date = new Date(dateKey);
             labels.push(date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }));
-            revenueData.push(dailySales.get(dateKey).revenue);
+            
+            // Sum all amounts for this day, converting to preferred currency
+            const dayTotal = dailySales.get(dateKey).amounts.reduce((sum, item) => {
+                return sum + this.convertCurrency(item.amount, item.currency);
+            }, 0);
+            
+            revenueData.push(dayTotal);
+            totalRevenue += dayTotal;
         });
         
-        // Calculate metrics
+        // Calculate metrics (already in display currency)
         const avgOrderValue = totalOrders > 0 ? Math.floor(totalRevenue / totalOrders) : 0;
+        
+        // Calculate balances in display currency
+        stripeBalance = stripeBalances.reduce((sum, item) => {
+            return sum + this.convertCurrency(item.amount, item.currency);
+        }, 0);
+        
+        paypalBalance = paypalBalances.reduce((sum, item) => {
+            return sum + this.convertCurrency(item.amount, item.currency);
+        }, 0);
         
         // Calculate growth (compare last 15 days to previous 15 days)
         const recentRevenue = revenueData.slice(15).reduce((sum, val) => sum + val, 0);
@@ -1219,14 +1234,14 @@ class PaymentDashboard {
             ? (((recentRevenue - previousRevenue) / previousRevenue) * 100).toFixed(1)
             : '0.0';
         
-        // Calculate today and yesterday revenue
+        // Calculate today and yesterday revenue (already converted)
         const todayKey = today.toISOString().split('T')[0];
         const yesterday = new Date(today);
         yesterday.setDate(yesterday.getDate() - 1);
         const yesterdayKey = yesterday.toISOString().split('T')[0];
         
-        const todayRevenue = Math.round(dailySales.get(todayKey)?.revenue || 0);
-        const yesterdayRevenue = Math.round(dailySales.get(yesterdayKey)?.revenue || 0);
+        const todayRevenue = Math.round(revenueData[revenueData.length - 1] || 0);
+        const yesterdayRevenue = Math.round(revenueData[revenueData.length - 2] || 0);
         
         // Format recent activity from charges
         const recentActivity = [];
@@ -1246,17 +1261,14 @@ class PaymentDashboard {
                         timeAgo = `${Math.floor(minutesAgo / 1440)}d ago`;
                     }
                     
-                    const sourceCurrency = (charge.currency || 'usd').toUpperCase();
-                    let amount = charge.amount / 100;
-                    // Convert to USD if source is not USD
-                    if (sourceCurrency !== 'USD' && this.exchangeRates[sourceCurrency]) {
-                        amount = amount / this.exchangeRates[sourceCurrency];
-                    }
+                    const currency = (charge.currency || 'usd').toUpperCase();
+                    const amount = charge.amount / 100;
                     
                     recentActivity.push({
                         time: chargeTime,
                         timeAgo,
                         amount,
+                        currency,
                         description: charge.description || 'Payment',
                         source: 'stripe'
                     });
@@ -1278,17 +1290,14 @@ class PaymentDashboard {
                         timeAgo = `${Math.floor(minutesAgo / 1440)}d ago`;
                     }
                     
-                    const sourceCurrency = (transaction.transaction_info?.transaction_amount?.currency_code || 'USD').toUpperCase();
-                    let amount = Math.abs(parseFloat(transaction.transaction_info?.transaction_amount?.value || 0));
-                    // Convert to USD if source is not USD
-                    if (sourceCurrency !== 'USD' && this.exchangeRates[sourceCurrency]) {
-                        amount = amount / this.exchangeRates[sourceCurrency];
-                    }
+                    const currency = (transaction.transaction_info?.transaction_amount?.currency_code || 'USD').toUpperCase();
+                    const amount = Math.abs(parseFloat(transaction.transaction_info?.transaction_amount?.value || 0));
                     
                     recentActivity.push({
                         time: txTime,
                         timeAgo,
                         amount,
+                        currency,
                         description: transaction.transaction_info?.transaction_type || 'Payment',
                         source: 'paypal'
                     });
@@ -1302,23 +1311,23 @@ class PaymentDashboard {
         // Mock conversion rate (would need traffic data for real calculation)
         const conversionRate = (Math.random() * 2 + 1.5).toFixed(2);
         
-        // Apply currency conversion to all amounts
+        // All amounts already in display currency - no double conversion
         return {
-            revenue: Math.round(this.convertCurrency(totalRevenue)),
+            revenue: Math.round(totalRevenue),
             orders: totalOrders,
-            avgOrderValue: Math.round(this.convertCurrency(avgOrderValue)),
+            avgOrderValue: Math.round(avgOrderValue),
             conversionRate,
             growth,
-            todayRevenue: Math.round(this.convertCurrency(todayRevenue)),
-            yesterdayRevenue: Math.round(this.convertCurrency(yesterdayRevenue)),
+            todayRevenue: Math.round(todayRevenue),
+            yesterdayRevenue: Math.round(yesterdayRevenue),
             labels,
-            revenueData: revenueData.map(v => Math.round(this.convertCurrency(v))),
-            stripeBalance: Math.round(this.convertCurrency(stripeBalance)),
-            paypalBalance: Math.round(this.convertCurrency(paypalBalance)),
+            revenueData: revenueData.map(v => Math.round(v)),
+            stripeBalance: Math.round(stripeBalance),
+            paypalBalance: Math.round(paypalBalance),
             dailySales: Array.from(dailySales.values()),
             recentActivity: recentActivity.slice(0, 20).map(activity => ({
                 ...activity,
-                amount: this.convertCurrency(activity.amount)
+                amount: this.convertCurrency(activity.amount, activity.currency)
             }))
         };
     }

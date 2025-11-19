@@ -1,7 +1,7 @@
 {
   "name": "stripe-view",
-  "version": "0.0.2",
-  "description": "Payment dashboard with Stripe and PayPal integration",
+  "version": "0.0.3",
+  "description": "Desktop application to view Stripe and PayPal revenue analytics",
   "main": "src/server.js",
   "bin": "src/server.js",
   "scripts": {
