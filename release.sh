@@ -57,9 +57,10 @@ git commit -m "v$VERSION release"
 echo "🏷️  Creating tag v$VERSION..."
 git tag "v$VERSION"
 
-# Push changes and tag together (avoids double build)
+# Push commit and tag together atomically (avoids double build)
 echo "⬆️  Pushing to GitHub..."
-git push --follow-tags
+git push origin main
+git push origin "v$VERSION"
 
 echo ""
 echo "✅ Release v$VERSION complete!"

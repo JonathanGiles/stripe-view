@@ -30,10 +30,16 @@ jobs:
       - name: Build executable
         run: npm run build
       
+      - name: Convert to GUI app (hide console)
+        run: |
+          curl -L -o editbin.exe https://github.com/electron/rcedit/releases/download/v2.0.0/rcedit-x64.exe
+          .\editbin.exe dist\stripe-view-win.exe --set-subsystem-to-windows
+        shell: pwsh
+      
       - name: Create release package
         run: |
           mkdir release
-          copy dist\stripe-view-win.exe release\
+          powershell Compress-Archive -Path dist\stripe-view-win.exe -DestinationPath release\stripe-view-win.zip -CompressionLevel Optimal
         shell: cmd
       
       - name: Upload artifact
@@ -46,7 +52,7 @@ jobs:
         if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v1
         with:
-          files: release/stripe-view-win.exe
+          files: release/stripe-view-win.zip
           draft: false
           prerelease: false
         env:

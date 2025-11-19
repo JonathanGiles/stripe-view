@@ -6,6 +6,7 @@
         <title>Payment Dashboard</title>
     <link rel="stylesheet" href="styles.css">
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tsparticles/confetti@3.0.3/tsparticles.confetti.bundle.min.js"></script>
     <script src="https://js.stripe.com/v3/"></script>
 </head>
 <body>
@@ -91,6 +92,21 @@
                         <option value="GBP">GBP (£)</option>
                         <option value="CAD">CAD ($)</option>
                     </select>
+                </div>
+            </div>
+            <div class="settings-blade-footer">
+                <div class="settings-group">
+                    <label class="settings-label">Sale Notifications</label>
+                    <div class="test-buttons">
+                        <button id="testSoundBtn" class="btn btn-test">🔊 Test Sound</button>
+                        <button id="testConfettiBtn" class="btn btn-test">🎉 Test Confetti</button>
+                    </div>
+                </div>
+                <div class="settings-group">
+                    <div class="server-header">
+                        <label class="settings-label" id="serverVersion">Server Version ...</label>
+                    </div>
+                    <button id="stopServerBtn" class="btn btn-danger">🛑 Stop Server</button>
                 </div>
             </div>
         </div>

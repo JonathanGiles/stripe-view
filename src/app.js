@@ -29,6 +29,7 @@ class PaymentDashboard {
             await this.loadViewLayout();
             this.loadPreferences(); // Load preferences after viewLayout is loaded
             await this.fetchExchangeRates();
+            await this.fetchServerStatus(); // Get server version
             await this.renderDashboard();
             this.setupEventListeners();
             this.hideLoading();
@@ -36,6 +37,21 @@ class PaymentDashboard {
             console.error('Initialization error:', error);
             this.showError('Failed to initialize dashboard. Please check your config files.');
             this.hideLoading();
+        }
+    }
+
+    async fetchServerStatus() {
+        try {
+            const response = await fetch('/api/status');
+            if (response.ok) {
+                const status = await response.json();
+                const versionEl = document.getElementById('serverVersion');
+                if (versionEl) {
+                    versionEl.textContent = `Server Version ${status.version}`;
+                }
+            }
+        } catch (error) {
+            console.warn('Could not fetch server status:', error);
         }
     }
 
@@ -135,35 +151,51 @@ class PaymentDashboard {
         
         if (hasNewSales) {
             this.playSaleSound();
+            this.showConfetti();
         }
     }
 
     playSaleSound() {
         try {
-            // Create a simple pleasant notification sound
-            const audioContext = new (window.AudioContext || window.webkitAudioContext)();
-            const oscillator = audioContext.createOscillator();
-            const gainNode = audioContext.createGain();
-            
-            oscillator.connect(gainNode);
-            gainNode.connect(audioContext.destination);
-            
-            // Pleasant chime sound (C5, E5, G5)
-            const notes = [523.25, 659.25, 783.99];
-            let time = audioContext.currentTime;
-            
-            notes.forEach((freq, i) => {
-                oscillator.frequency.setValueAtTime(freq, time);
-                gainNode.gain.setValueAtTime(0.3, time);
-                gainNode.gain.exponentialRampToValueAtTime(0.01, time + 0.3);
-                time += 0.15;
-            });
-            
-            oscillator.start(audioContext.currentTime);
-            oscillator.stop(audioContext.currentTime + 0.6);
+            // Play the ka-ching sound file
+            const audio = new Audio('ka-ching.mp3');
+            audio.volume = 0.6;
+            audio.play().catch(err => console.warn('Could not play sound:', err));
         } catch (error) {
             console.warn('Could not play sound:', error);
         }
+    }
+
+    showConfetti() {
+        // Stars confetti with money colors (golds and greens)
+        const defaults = {
+            spread: 360,
+            ticks: 50,
+            gravity: 0,
+            decay: 0.94,
+            startVelocity: 30,
+            colors: ['FFE400', 'FFBD00', 'E89400', 'FFCA6C', 'FDFFB8', '10b981', 'fbbf24']
+        };
+
+        function shoot() {
+            confetti({
+                ...defaults,
+                particleCount: 40,
+                scalar: 1.2,
+                shapes: ['star']
+            });
+
+            confetti({
+                ...defaults,
+                particleCount: 10,
+                scalar: 0.75,
+                shapes: ['circle']
+            });
+        }
+
+        setTimeout(shoot, 0);
+        setTimeout(shoot, 100);
+        setTimeout(shoot, 200);
     }
 
     formatCurrency(amount, sourceCurrency = null) {
@@ -1629,6 +1661,41 @@ class PaymentDashboard {
                 closeSettings();
             }
         });
+
+        // Test sound button
+        const testSoundBtn = document.getElementById('testSoundBtn');
+        if (testSoundBtn) {
+            testSoundBtn.addEventListener('click', () => {
+                this.playSaleSound();
+            });
+        }
+
+        // Test confetti button
+        const testConfettiBtn = document.getElementById('testConfettiBtn');
+        if (testConfettiBtn) {
+            testConfettiBtn.addEventListener('click', () => {
+                // Close settings blade first so we can see the confetti
+                closeSettings();
+                // Small delay to let blade close animation complete
+                setTimeout(() => {
+                    this.showConfetti();
+                }, 150);
+            });
+        }
+
+        // Stop server button
+        const stopServerBtn = document.getElementById('stopServerBtn');
+        if (stopServerBtn) {
+            stopServerBtn.addEventListener('click', async () => {
+                if (confirm('Are you sure you want to stop the server? This will close Stripe View.')) {
+                    try {
+                        window.location.href = '/api/shutdown';
+                    } catch (error) {
+                        console.error('Error stopping server:', error);
+                    }
+                }
+            });
+        }
     }
 
     showLoading() {

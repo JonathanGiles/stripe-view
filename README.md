@@ -16,10 +16,12 @@ Real-time revenue analytics for Stripe and PayPal across multiple projects. Prof
 ## Quick Start
 
 ### Windows Executable (Recommended)
-1. Download `stripe-view-win.exe` from [Releases](../../releases)
-2. Create `config.json` next to the exe (see Configuration below)
-3. Double-click `stripe-view-win.exe`
-4. Browser opens to `http://localhost:3000`
+1. Download `stripe-view-win.zip` from [Releases](../../releases)
+2. Extract the zip file
+3. Create `config.json` next to the exe (see Configuration below)
+4. Double-click `stripe-view-win.exe`
+5. Browser automatically opens to `http://localhost:3000`
+6. Server runs silently in the background (no console window)
 
 ### Node.js (All Platforms)
 ```bash
@@ -73,6 +75,24 @@ Create `config.json` next to the executable:
 npm install
 npm start
 ```
+
+## Managing the Server
+
+### Stopping the Server
+- **Via UI**: Click Settings ⚙️ → Stop Server button at the bottom
+- **Via Browser**: Navigate to `http://localhost:3000/api/shutdown`
+- **Via Task Manager** (Windows): End the `stripe-view-win.exe` process
+
+### Upgrading
+1. Stop the current server (see above)
+2. Download the latest `stripe-view-win.zip` from [Releases](../../releases)
+3. Extract and replace the old exe
+4. Your `config.json` and `view.json` are preserved
+5. Start the new version
+
+### Version Check
+- Open Settings ⚙️ to see your current version
+- Compare with latest release: https://github.com/JonathanGiles/stripe-view/releases
 
 ## Release
 

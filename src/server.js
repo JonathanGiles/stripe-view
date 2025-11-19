@@ -376,6 +376,70 @@ async function handleClassicPayPalAPI(credentials, startDate, endDate, res) {
     }
 }
 
+/**
+ * Endpoint to stop the server gracefully
+ * GET /api/shutdown
+ */
+app.get('/api/shutdown', (req, res) => {
+    console.log('🛑 Shutdown requested...');
+    res.send(`
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <title>Stripe View - Shutting Down</title>
+            <style>
+                body {
+                    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    height: 100vh;
+                    margin: 0;
+                    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                    color: white;
+                }
+                .container {
+                    text-align: center;
+                    padding: 2rem;
+                    background: rgba(255, 255, 255, 0.1);
+                    border-radius: 12px;
+                    backdrop-filter: blur(10px);
+                }
+                h1 { margin: 0 0 1rem 0; font-size: 2rem; }
+                p { margin: 0.5rem 0; font-size: 1.1rem; }
+                .icon { font-size: 4rem; margin-bottom: 1rem; }
+            </style>
+        </head>
+        <body>
+            <div class="container">
+                <div class="icon">👋</div>
+                <h1>Server Stopped</h1>
+                <p>Stripe View has been shut down successfully.</p>
+                <p>You can close this window.</p>
+            </div>
+        </body>
+        </html>
+    `);
+    setTimeout(() => {
+        console.log('✅ Server stopped');
+        process.exit(0);
+    }, 1000);
+});
+
+/**
+ * Endpoint to get server status and version
+ * GET /api/status
+ */
+app.get('/api/status', (req, res) => {
+    const packageJson = require('../package.json');
+    res.json({
+        status: 'running',
+        version: packageJson.version,
+        port: PORT,
+        baseDir: baseDir
+    });
+});
+
 app.listen(PORT, () => {
     console.log(`✅ Backend proxy server running on http://localhost:${PORT}`);
     console.log(`Frontend: http://localhost:${PORT}`);
@@ -385,4 +449,19 @@ app.listen(PORT, () => {
     console.log(`\nEndpoints:`);
     console.log(`  POST /api/stripe/data`);
     console.log(`  POST /api/paypal/data`);
+    console.log(`  GET  /api/status`);
+    console.log(`  GET  /api/shutdown`);
+    console.log(`\n💡 To stop the server, visit: http://localhost:${PORT}/api/shutdown`);
+    
+    // Auto-open browser when running as executable
+    if (isPkg) {
+        const { exec } = require('child_process');
+        const url = `http://localhost:${PORT}`;
+        const start = process.platform === 'win32' ? 'start' : process.platform === 'darwin' ? 'open' : 'xdg-open';
+        exec(`${start} ${url}`, (error) => {
+            if (error) {
+                console.log(`\n🌐 Please open your browser to: ${url}`);
+            }
+        });
+    }
 });
