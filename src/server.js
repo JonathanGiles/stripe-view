@@ -25,11 +25,10 @@ app.use(cors());
 app.use(express.json());
 
 // Serve static files
-// In pkg mode: serve from executable directory
-// In dev mode: serve from src/ and parent directory
 if (isPkg) {
-    // Executable mode: config.json and view.json are next to the .exe
-    app.use(express.static(baseDir));
+    // Executable mode: serve embedded files from snapshot and external config from baseDir
+    app.use(express.static(__dirname)); // Serves embedded src/ files
+    app.use(express.static(baseDir));   // Serves config.json/view.json from exe directory
 } else {
     // Dev mode: serve from src/ and parent directory
     app.use(express.static(__dirname));
