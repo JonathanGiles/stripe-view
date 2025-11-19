@@ -93,6 +93,17 @@ app.post('/api/stripe/data', async (req, res) => {
         let balance = null;
         try {
             balance = await stripe.balance.retrieve();
+            
+            // Log balance details for verification
+            if (balance) {
+                const availableTotal = (balance.available || []).reduce((sum, b) => sum + b.amount, 0) / 100;
+                const pendingTotal = (balance.pending || []).reduce((sum, b) => sum + b.amount, 0) / 100;
+                const grandTotal = availableTotal + pendingTotal;
+                console.log(`✓ Stripe Balance Retrieved:`);
+                console.log(`  Available: $${availableTotal.toLocaleString()}`);
+                console.log(`  Pending: $${pendingTotal.toLocaleString()}`);
+                console.log(`  TOTAL: $${grandTotal.toLocaleString()} (should match Stripe Dashboard)`);
+            }
         } catch (error) {
             console.warn('Could not fetch balance:', error.message);
         }

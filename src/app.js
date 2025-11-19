@@ -19,6 +19,8 @@ class PaymentDashboard {
         this.saleSound = new Audio('data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQoGAACBhYqFbF1fdJivrJBhNjVgodDbq2EcBj+a2/LDciUFLIHO8tiJNwgZaLvt559NEAxQp+PwtmMcBjiR1/LMeSwFJHfH8N2QQAoUXrTp66hVFApGn+DyvmwhBTGH0fPTgjMGHm7A7+OZRQ0PVqzn77BgGQc+ltryxnMoBSuAzvLZiTcIGWm98OScTgwNUajk7bdfGgY5ktjzyn0tBSV+zPDbjUEKFGG36+yjWBULSKLi8r1nHwYziM/z1YU2Bhxrwu7mnEQOD1Ot5++1YhsGPJbe8sd0KAUrgM3y2Yk3CBlqvfDknE4MDFKp5O2+YRoFOpPY88p9LQUlfsz/3Y5BCRVju+njpFsVDEmj4PG9aBwGM4nQ89WFNgYcbcLu5JtEDg5TrOfvtGIbBTuV3vPIdSgFK4HO8tmJOAgaarz/5JxODAxSqeTtvmEaBTuV2PPK/S0FJn/N8N2OQgkUYrvp5KNbFQxJo+DxvWkcBjOJ0PPVhTYGHG7D7uSbRA4OU6vn77NjGwU7ld7zyHYoBSuBzvLZiTgIGmq88OSbTgwMUqnk7b5hGgU7ldjzyv0tBSZ/zfDejkIJFGK76eOkWxUMSaPg8b1pHAYzidDz1YU2Bhxvw+7km0QODlOr5++yYhsFO5Xe88h2KAUrgc7y2Yk4CBpqvPDkm04MDFKp5O2+YRoFO5XY88r9LQUmf83w3o5CCRRiu+njpFsVDEmj4PG9aRwGM4nQ89WFNgYcb8Pu5JtEDg5Tq+fvsmIbBTuV3vPIdigFK4HO8tmJOAgaarzw5JtODAxSqeTtvmEaBTuV2PPK/S0FJn/N8N6OQgkUYrvp46RbFQxJo+DxvWkcBjOJ0PPVhTYGHG/D7uSbRA4OU6vn77JiGwU7ld7zyHYoBSuBzvLZiTgIGmq88OSbTgwMUqnk7b5hGgU7ldjzyv0tBSZ/zfDejkIJFGK76eOkWxUMSaPg8b1pHAYzidDz1YU2Bhxvw+7km0QODlOr5++yYhsFO5Xe88h2KAUrgc7y2Yk4CBpqvPDkm04MDFKp5O2+YRoFO5XY88r9LQUmf83w3o5CCRRiu+njpFsVDEmj4PG9aRwGM4nQ89WFNgYcb8Pu5JtEDg5Tq+fvsmIbBTuV3vPIdigFK4HO8tmJOAgaarzw5JtODAxSqeTtvmEaBTuV2PPK/S0FJn/N8N6OQgkUYrvp46RbFQxJo+DxvWkcBjOJ0PPVhTYGHG/D7uSbRA4OU6vn77JiGwU7ld7zyHYoBSuBzvLZiTgIGmq88OSbTgwMUqnk7b5hGgU7ldjzyv0tBSZ/zfDejkIJFGK76eOkWxUMSaPg8b1pHAYzidDz1YU2Bhxvw+7km0QODlOr5++yYhsFO5Xe88h2KAUrgc7y2Yk4CBpqvPDkm04MDFKp5O2+YRoFO5XY88r9LQUmf83w3o5CCRRiu+njpFsVDEmj4PG9aRwGM4nQ89WFNgYcb8Pu5JtEDg5Tq+fvsmIbBTuV3vPIdigFK4HO8tmJOAgaarzw5JtODAxSqeTtvmEaBTuV2PPK/S0FJn/N8N6OQgkUYrvp46RbFQxJo+DxvWkcBjOJ0PPVhTYGHG/D7uSbRA4OU6vn77JiGwU7ld7zyHYoBSuBzvLZiTgIGmq88OSbTgwMUqnk7b5hGgU7ldjzyv0tBSZ/zfDejkIJFGK76eOkWxUMSaPg8b1pHAYzidDz1YU2Bhxvw+7km0QODlOr5++yYhsFO5Xe88h2KAUrgc7y2Yk4CBpqvPDkm04MDFKp5O2+YRoFO5XY88r9LQUmf83w3o5CCRRiu+njpFsVDEmj4PG9aRwGM4nQ89WFNgYcb8Pu5JtEDg5Tq+fvsmIbBTuV3vPIdigFK4HO8tmJOAgaarzw5JtODAxSqeTtvmEa');
         this.overviewChart = null; // Store overview chart instance
         this.projectsData = new Map();
+        this.lastRefreshTime = Date.now();
+        this.countdownInterval = null;
         
         this.init();
     }
@@ -32,6 +34,8 @@ class PaymentDashboard {
             await this.fetchServerStatus(); // Get server version
             await this.renderDashboard();
             this.setupEventListeners();
+            this.startCountdownTimer();
+            this.startAutoRefresh(); // Start automatic polling
             this.hideLoading();
         } catch (error) {
             console.error('Initialization error:', error);
@@ -112,7 +116,11 @@ class PaymentDashboard {
         
         // Start polling
         this.pollingInterval = setInterval(async () => {
+            const refreshStartTime = Date.now();
+            console.log(`⏰ Refresh triggered at ${new Date().toLocaleTimeString()}`);
             await this.refreshData();
+            const refreshDuration = ((Date.now() - refreshStartTime) / 1000).toFixed(1);
+            console.log(`✓ Refresh completed in ${refreshDuration}s`);
         }, intervalSeconds * 1000);
     }
 
@@ -127,10 +135,19 @@ class PaymentDashboard {
             // Re-fetch all project data
             await this.renderDashboard();
             
+            // Update refresh time and restart countdown
+            this.lastRefreshTime = Date.now();
+            this.startCountdownTimer(); // Restart the countdown
+            
+            console.log('✓ Background refresh complete');
+            
             // Check for new sales and play sound
             this.detectNewSales(oldProjectsData);
         } catch (error) {
             console.error('Background refresh failed:', error);
+            // Still update time to prevent stuck "Updating..." state
+            this.lastRefreshTime = Date.now();
+            this.startCountdownTimer();
         }
     }
 
@@ -155,11 +172,42 @@ class PaymentDashboard {
         }
     }
 
+    startCountdownTimer() {
+        // Clear existing interval
+        if (this.countdownInterval) {
+            clearInterval(this.countdownInterval);
+        }
+        
+        // Get the actual polling interval from config
+        const intervalMs = (this.config?.pollingIntervalSeconds || 60) * 1000;
+        
+        const updateCountdown = () => {
+            const elapsed = Date.now() - this.lastRefreshTime;
+            const remaining = Math.max(0, intervalMs - elapsed);
+            const seconds = Math.ceil(remaining / 1000);
+            
+            const liveText = document.querySelector('.live-text');
+            if (liveText) {
+                if (seconds > 0) {
+                    liveText.textContent = `Live • ${seconds}s`;
+                } else {
+                    liveText.textContent = 'Updating...';
+                }
+            }
+        };
+        
+        // Update immediately
+        updateCountdown();
+        
+        // Update every second
+        this.countdownInterval = setInterval(updateCountdown, 1000);
+    }
+
     playSaleSound() {
         try {
             // Play the ka-ching sound file
             const audio = new Audio('ka-ching.mp3');
-            audio.volume = 0.6;
+            audio.volume = 0.1;
             audio.play().catch(err => console.warn('Could not play sound:', err));
         } catch (error) {
             console.warn('Could not play sound:', error);
@@ -437,8 +485,18 @@ class PaymentDashboard {
         const summaryData = this.calculateSummaryData(projects);
         const section = document.getElementById('summarySection');
         
+        // Calculate progress percentage
+        const progressPercent = summaryData.daysInMonth > 0 
+            ? Math.round((summaryData.monthToDateRevenue / summaryData.projectedMonthlyRevenue) * 100)
+            : 0;
+        
         section.innerHTML = `
             <div class="summary-stats">
+                <div class="summary-stat-card">
+                    <div class="summary-stat-label">Total Balance</div>
+                    <div class="summary-stat-value">${this.formatCurrency(summaryData.totalBalance)}</div>
+                    <div class="summary-stat-change">Total cash in all accounts</div>
+                </div>
                 <div class="summary-stat-card">
                     <div class="summary-stat-label">Total Revenue (30 Days)</div>
                     <div class="summary-stat-value">${this.formatCurrency(summaryData.totalRevenue)}</div>
@@ -447,12 +505,17 @@ class PaymentDashboard {
                 <div class="summary-stat-card">
                     <div class="summary-stat-label">Month to Date</div>
                     <div class="summary-stat-value">${this.formatCurrency(summaryData.monthToDateRevenue)}</div>
-                    <div class="summary-stat-change">Revenue since ${new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric' }).split(' ')[0]} 1</div>
+                    <div class="summary-stat-change">Day ${summaryData.daysIntoMonth} of ${summaryData.daysInMonth} • ${this.formatCurrency(summaryData.dailyAverage)}/day avg</div>
                 </div>
                 <div class="summary-stat-card">
                     <div class="summary-stat-label">Today</div>
                     <div class="summary-stat-value">${this.formatCurrency(summaryData.todayRevenue)}</div>
                     <div class="summary-stat-change">Revenue for ${new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</div>
+                </div>
+                <div class="summary-stat-card">
+                    <div class="summary-stat-label">Projected Monthly</div>
+                    <div class="summary-stat-value">${this.formatCurrency(summaryData.projectedMonthlyRevenue)}</div>
+                    <div class="summary-stat-change">${summaryData.peakDay ? `Peak day: ${summaryData.peakDay}` : 'Analyzing patterns...'}${summaryData.peakHour ? ` • ${summaryData.peakHour}` : ''}</div>
                 </div>
             </div>
         `;
@@ -647,13 +710,13 @@ class PaymentDashboard {
                     ${hasStripe && salesData.stripeBalance !== undefined ? `
                     <div class="balance-card">
                         <span class="balance-label">💳 Stripe Balance</span>
-                        <span class="balance-value">$${salesData.stripeBalance.toLocaleString()}</span>
+                        <span class="balance-value">${this.formatCurrency(salesData.stripeBalance)}</span>
                     </div>
                     ` : ''}
                     ${hasPaypal && salesData.paypalBalance !== undefined ? `
                     <div class="balance-card">
                         <span class="balance-label">🅿️ PayPal Balance</span>
-                        <span class="balance-value">$${salesData.paypalBalance.toLocaleString()}</span>
+                        <span class="balance-value">${this.formatCurrency(salesData.paypalBalance)}</span>
                     </div>
                     ` : ''}
                 </div>
@@ -801,7 +864,7 @@ class PaymentDashboard {
                     <div class="metric-item">
                         <div class="metric-label">Balance</div>
                         <div class="metric-value-large">${this.formatCurrency(salesData.stripeBalance + salesData.paypalBalance)}</div>
-                        <div class="metric-sub">${hasStripe ? 'S: ' + this.formatCurrency(salesData.stripeBalance) : ''}${hasStripe && hasPaypal ? ' ' : ''}${hasPaypal ? 'P: ' + this.formatCurrency(salesData.paypalBalance) : ''}</div>
+                        <div class="metric-sub">${hasStripe ? 'Stripe: ' + this.formatCurrency(salesData.stripeBalance) : ''}${hasStripe && hasPaypal ? ' | ' : ''}${hasPaypal ? 'PayPal: ' + this.formatCurrency(salesData.paypalBalance) : ''}</div>
                     </div>
                     ` : ''}
                 </div>
@@ -1004,20 +1067,27 @@ class PaymentDashboard {
         let monthToDateRevenue = 0;
         let activeStripe = 0;
         let activePaypal = 0;
+        let totalBalance = 0;
 
         const today = new Date();
         const firstOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
-        // Use local date to avoid timezone issues
-        const todayDateKey = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+        const daysIntoMonth = today.getDate();
+        const daysInMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0).getDate();
+        
+        // For peak analysis
+        const dayOfWeekRevenue = new Array(7).fill(0); // Sun=0, Mon=1, etc.
+        const dayOfWeekCounts = new Array(7).fill(0);
+        const hourRevenue = new Array(24).fill(0);
+        const hourCounts = new Array(24).fill(0);
 
         projects.forEach(project => {
             const salesData = this.projectsData.get(project.id);
             if (salesData) {
                 totalRevenue += salesData.revenue;
                 todayRevenue += salesData.todayRevenue || 0;
+                totalBalance += (salesData.stripeBalance || 0) + (salesData.paypalBalance || 0);
                 
-                // Calculate month-to-date by iterating through the 30-day window
-                // and summing only dates that fall in the current month
+                // Calculate month-to-date and peak analysis
                 if (salesData.revenueData && salesData.labels) {
                     for (let i = 0; i < salesData.labels.length; i++) {
                         // Reconstruct the date from our 30-day window
@@ -1025,18 +1095,88 @@ class PaymentDashboard {
                         const date = new Date(today);
                         date.setDate(date.getDate() - daysBack);
                         
-                        // If this date is in the current month, add its revenue
+                        const revenue = salesData.revenueData[i] || 0;
+                        
+                        // If this date is in the current month, add to MTD
                         if (date >= firstOfMonth && date <= today) {
-                            monthToDateRevenue += salesData.revenueData[i] || 0;
+                            monthToDateRevenue += revenue;
                         }
+                        
+                        // Track day of week
+                        const dayOfWeek = date.getDay();
+                        dayOfWeekRevenue[dayOfWeek] += revenue;
+                        if (revenue > 0) dayOfWeekCounts[dayOfWeek]++;
                     }
+                }
+                
+                // Track hours from recent activity
+                if (salesData.recentActivity) {
+                    salesData.recentActivity.forEach(activity => {
+                        const date = new Date(activity.time);
+                        const hour = date.getHours();
+                        const convertedAmount = this.convertCurrency(activity.amount, activity.currency);
+                        hourRevenue[hour] += convertedAmount;
+                        hourCounts[hour]++;
+                    });
                 }
             }
             if (project.stripe?.enabled) activeStripe++;
             if (project.paypal?.enabled) activePaypal++;
         });
+        
+        // Calculate revenue velocity (projected end of month)
+        const dailyAverage = daysIntoMonth > 0 ? monthToDateRevenue / daysIntoMonth : 0;
+        const projectedMonthlyRevenue = dailyAverage * daysInMonth;
+        
+        // Find peak day of week
+        let peakDayIndex = 0;
+        let peakDayAvg = 0;
+        const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+        for (let i = 0; i < 7; i++) {
+            const avg = dayOfWeekCounts[i] > 0 ? dayOfWeekRevenue[i] / dayOfWeekCounts[i] : 0;
+            if (avg > peakDayAvg) {
+                peakDayAvg = avg;
+                peakDayIndex = i;
+            }
+        }
+        const peakDay = dayNames[peakDayIndex];
+        
+        // Find peak hour (only if we have hour data)
+        let peakHour = null;
+        let peakHourAvg = 0;
+        for (let i = 0; i < 24; i++) {
+            const avg = hourCounts[i] > 0 ? hourRevenue[i] / hourCounts[i] : 0;
+            if (avg > peakHourAvg) {
+                peakHourAvg = avg;
+                peakHour = i;
+            }
+        }
+        
+        // Format peak hour as range (e.g., "2-3 PM")
+        let peakHourLabel = null;
+        if (peakHour !== null && peakHourAvg > 0) {
+            const formatHour = (h) => {
+                if (h === 0) return '12 AM';
+                if (h === 12) return '12 PM';
+                return h < 12 ? `${h} AM` : `${h - 12} PM`;
+            };
+            peakHourLabel = `${formatHour(peakHour)}-${formatHour((peakHour + 1) % 24)}`;
+        }
 
-        return { totalRevenue, todayRevenue, monthToDateRevenue, activeStripe, activePaypal };
+        return { 
+            totalRevenue, 
+            todayRevenue, 
+            monthToDateRevenue, 
+            activeStripe, 
+            activePaypal,
+            projectedMonthlyRevenue,
+            dailyAverage,
+            daysIntoMonth,
+            daysInMonth,
+            peakDay,
+            peakHour: peakHourLabel,
+            totalBalance
+        };
     }
 
     async fetchProjectSalesData(project) {
@@ -1227,10 +1367,31 @@ class PaymentDashboard {
                 }
             });
             
-            if (stripeData.balance?.available) {
-                stripeData.balance.available.forEach(bal => {
+            if (stripeData.balance) {
+                // Combine available and pending balances (what Stripe UI shows)
+                const allBalances = [
+                    ...(stripeData.balance.available || []),
+                    ...(stripeData.balance.pending || [])
+                ];
+                
+                // Log for verification
+                const availableTotal = (stripeData.balance.available || []).reduce((sum, b) => sum + b.amount / 100, 0);
+                const pendingTotal = (stripeData.balance.pending || []).reduce((sum, b) => sum + b.amount / 100, 0);
+                console.log(`Stripe Balance Calculation: Available $${availableTotal.toLocaleString()} + Pending $${pendingTotal.toLocaleString()} = Total $${(availableTotal + pendingTotal).toLocaleString()}`);
+                
+                // Sum by currency
+                const balanceByCurrency = new Map();
+                allBalances.forEach(bal => {
                     const currency = (bal.currency || 'usd').toUpperCase();
                     const amount = bal.amount / 100;
+                    balanceByCurrency.set(
+                        currency, 
+                        (balanceByCurrency.get(currency) || 0) + amount
+                    );
+                });
+                
+                // Convert to array
+                balanceByCurrency.forEach((amount, currency) => {
                     stripeBalances.push({ amount, currency });
                 });
             }
@@ -1294,6 +1455,18 @@ class PaymentDashboard {
         paypalBalance = paypalBalances.reduce((sum, item) => {
             return sum + this.convertCurrency(item.amount, item.currency);
         }, 0);
+        
+        // Calculate separate available and pending for Stripe
+        let stripeAvailable = 0;
+        let stripePending = 0;
+        if (stripeData?.balance) {
+            stripeAvailable = (stripeData.balance.available || []).reduce((sum, bal) => {
+                return sum + this.convertCurrency(bal.amount / 100, (bal.currency || 'usd').toUpperCase());
+            }, 0);
+            stripePending = (stripeData.balance.pending || []).reduce((sum, bal) => {
+                return sum + this.convertCurrency(bal.amount / 100, (bal.currency || 'usd').toUpperCase());
+            }, 0);
+        }
         
         // Calculate growth (compare last 15 days to previous 15 days)
         const recentRevenue = revenueData.slice(15).reduce((sum, val) => sum + val, 0);
@@ -1392,6 +1565,8 @@ class PaymentDashboard {
             labels,
             revenueData: revenueData.map(v => Math.round(v)),
             stripeBalance: Math.round(stripeBalance),
+            stripeAvailable: Math.round(stripeAvailable),
+            stripePending: Math.round(stripePending),
             paypalBalance: Math.round(paypalBalance),
             dailySales: Array.from(dailySales.values()),
             recentActivity: recentActivity.slice(0, 20).map(activity => ({
