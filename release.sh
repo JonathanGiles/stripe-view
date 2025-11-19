@@ -50,10 +50,14 @@ sed -i '' "s/\"version\": \".*\"/\"version\": \"$VERSION\"/" package.json
 echo "✓ Version updated to $VERSION"
 echo ""
 
-# Commit the version change
-echo "💾 Committing version change..."
-git add package.json
-git commit -m "v$VERSION release"
+# Commit the version change (only if there are changes)
+if ! git diff-index --quiet HEAD -- package.json; then
+    echo "💾 Committing version change..."
+    git add package.json
+    git commit -m "v$VERSION release"
+else
+    echo "ℹ️  Version already set to $VERSION, skipping commit"
+fi
 
 # Create tag (force overwrite if it exists)
 echo "🏷️  Creating tag v$VERSION..."
