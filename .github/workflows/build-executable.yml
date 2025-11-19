@@ -32,8 +32,8 @@ jobs:
       
       - name: Convert to GUI app (hide console)
         run: |
-          curl -L -o editbin.exe https://github.com/electron/rcedit/releases/download/v2.0.0/rcedit-x64.exe
-          .\editbin.exe dist\stripe-view-win.exe --set-subsystem-to-windows
+          curl -L -o rcedit.exe https://github.com/electron/rcedit/releases/download/v2.0.0/rcedit-x64.exe
+          .\rcedit.exe dist\stripe-view-win.exe --set-subsystem windows
         shell: pwsh
       
       - name: Create release package

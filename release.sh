@@ -23,9 +23,11 @@ fi
 echo "🚀 Starting release process for v$VERSION..."
 echo ""
 
-# Check for uncommitted changes
-if ! git diff-index --quiet HEAD --; then
+# Check for uncommitted changes (both staged and unstaged)
+git update-index --refresh > /dev/null 2>&1 || true
+if ! git diff-index --quiet HEAD -- || [ -n "$(git status --porcelain)" ]; then
     echo "❌ Error: You have uncommitted changes. Please commit or stash them first."
+    git status --short
     exit 1
 fi
 
