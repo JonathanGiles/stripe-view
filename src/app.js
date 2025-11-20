@@ -1693,12 +1693,20 @@ class PaymentDashboard {
         const stripeBalances = [];
         if (stripeData?.charges) {
             stripeData.charges.forEach(charge => {
-                if (charge.paid && !charge.refunded) {
+                // Skip refunded charges completely
+                if (charge.refunded) return;
+                
+                // For paid charges, use net amount (after Stripe fees) if available
+                if (charge.paid) {
                     const date = new Date(charge.created * 1000);
                     // Use local date to avoid timezone issues
                     const dateKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
                     const currency = (charge.currency || 'usd').toUpperCase();
-                    const amount = charge.amount / 100; // Convert from cents
+                    
+                    // Use net amount (after fees) if balance_transaction is available, otherwise fall back to gross
+                    const amount = charge.balance_transaction?.net 
+                        ? charge.balance_transaction.net / 100 
+                        : charge.amount / 100;
                     
                     if (dailySales.has(dateKey)) {
                         const day = dailySales.get(dateKey);
@@ -1835,7 +1843,10 @@ class PaymentDashboard {
         
         if (stripeData?.recentCharges) {
             stripeData.recentCharges.forEach(charge => {
-                if (charge.paid && !charge.refunded) {
+                // Skip refunded charges
+                if (charge.refunded) return;
+                
+                if (charge.paid) {
                     const chargeTime = charge.created * 1000;
                     const minutesAgo = Math.floor((now - chargeTime) / 60000);
                     let timeAgo;
@@ -1848,7 +1859,10 @@ class PaymentDashboard {
                     }
                     
                     const currency = (charge.currency || 'usd').toUpperCase();
-                    const amount = charge.amount / 100;
+                    // Use net amount (after fees) if available
+                    const amount = charge.balance_transaction?.net 
+                        ? charge.balance_transaction.net / 100 
+                        : charge.amount / 100;
                     
                     recentActivity.push({
                         time: chargeTime,
