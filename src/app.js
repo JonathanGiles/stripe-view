@@ -1742,11 +1742,7 @@ class PaymentDashboard {
                     // Use local date to avoid timezone issues
                     const dateKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
                     const currency = (charge.currency || 'usd').toUpperCase();
-                    
-                    // Use net amount (after fees) if balance_transaction is available, otherwise fall back to gross
-                    const amount = charge.balance_transaction?.net 
-                        ? charge.balance_transaction.net / 100 
-                        : charge.amount / 100;
+                    const amount = charge.amount / 100;
                     
                     if (dailySales.has(dateKey)) {
                         const day = dailySales.get(dateKey);
@@ -1899,10 +1895,7 @@ class PaymentDashboard {
                     }
                     
                     const currency = (charge.currency || 'usd').toUpperCase();
-                    // Use net amount (after fees) if available
-                    const amount = charge.balance_transaction?.net 
-                        ? charge.balance_transaction.net / 100 
-                        : charge.amount / 100;
+                    const amount = charge.amount / 100;
                     
                     recentActivity.push({
                         time: chargeTime,

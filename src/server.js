@@ -77,18 +77,15 @@ app.post('/api/stripe/data', async (req, res) => {
         const stripe = new Stripe(apiKey);
 
         // Fetch charges from the past 30 days for charts
-        // Expand balance_transaction to get net amounts (after Stripe fees)
         const charges = await stripe.charges.list({
             limit: 100,
-            created: { gte: startTimestamp },
-            expand: ['data.balance_transaction']
+            created: { gte: startTimestamp }
         });
 
         // Also fetch recent charges for activity feed (last 24 hours)
         const recentCharges = await stripe.charges.list({
             limit: 50,
-            created: { gte: Math.floor(Date.now() / 1000) - 86400 }, // Last 24 hours
-            expand: ['data.balance_transaction']
+            created: { gte: Math.floor(Date.now() / 1000) - 86400 } // Last 24 hours
         });
 
         // Fetch balance
