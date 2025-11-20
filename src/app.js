@@ -184,6 +184,11 @@ class PaymentDashboard {
             if (hasChanges) {
                 this.renderSummarySection(this.config.projects);
                 this.renderOverviewGraph(this.config.projects);
+                
+                // Re-sort and re-order widgets if sort/filter is active
+                if (this.sortBy !== 'default' || this.filterBy !== 'all') {
+                    this.reorderWidgets();
+                }
             }
             
             // Update refresh time and restart countdown
@@ -618,10 +623,8 @@ class PaymentDashboard {
         try {
             const layoutData = {
                 layout: {
-                    widgets: this.widgets.map((widget, index) => ({
-                        projectId: widget.projectId,
-                        position: index
-                    }))
+                    // Only save widget order if sortBy is 'custom'
+                    widgets: this.sortBy === 'custom' ? this.widgets.map(w => w.projectId) : []
                 },
                 preferences: {
                     viewMode: this.viewMode,
@@ -718,20 +721,21 @@ class PaymentDashboard {
     }
 
     getOrderedProjects() {
-        const savedLayout = localStorage.getItem('dashboardLayout');
         let orderedProjects = [...this.config.projects];
 
-        if (savedLayout && this.sortBy === 'default') {
+        // Only apply custom layout if sortBy is 'custom' and we have saved widget order
+        if (this.sortBy === 'custom' && this.viewLayout?.layout?.widgets && this.viewLayout.layout.widgets.length > 0) {
             try {
-                const layout = JSON.parse(savedLayout);
-                const layoutMap = new Map(layout.layout.widgets.map(w => [w.projectId, w.position]));
+                const widgetOrder = this.viewLayout.layout.widgets;
+                // Create a map of projectId to position for quick lookup
+                const layoutMap = new Map(widgetOrder.map((id, index) => [id, index]));
                 orderedProjects.sort((a, b) => {
                     const posA = layoutMap.get(a.id) ?? 999;
                     const posB = layoutMap.get(b.id) ?? 999;
                     return posA - posB;
                 });
             } catch (error) {
-                console.error('Failed to parse saved layout:', error);
+                console.error('Failed to apply custom layout:', error);
             }
         }
 
@@ -742,25 +746,32 @@ class PaymentDashboard {
         const sorted = [...projects];
         
         switch(this.sortBy) {
+            case 'custom':
+                // Custom order is already handled in getOrderedProjects
+                // No additional sorting needed
+                break;
             case 'revenue-desc':
                 sorted.sort((a, b) => {
                     const dataA = this.projectsData.get(a.id);
                     const dataB = this.projectsData.get(b.id);
-                    return dataB.revenue - dataA.revenue;
+                    if (!dataA || !dataB) return 0;
+                    return (dataB.revenue || 0) - (dataA.revenue || 0);
                 });
                 break;
             case 'revenue-asc':
                 sorted.sort((a, b) => {
                     const dataA = this.projectsData.get(a.id);
                     const dataB = this.projectsData.get(b.id);
-                    return dataA.revenue - dataB.revenue;
+                    if (!dataA || !dataB) return 0;
+                    return (dataA.revenue || 0) - (dataB.revenue || 0);
                 });
                 break;
             case 'growth-desc':
                 sorted.sort((a, b) => {
                     const dataA = this.projectsData.get(a.id);
                     const dataB = this.projectsData.get(b.id);
-                    return parseFloat(dataB.growth) - parseFloat(dataA.growth);
+                    if (!dataA || !dataB) return 0;
+                    return parseFloat(dataB.growth || 0) - parseFloat(dataA.growth || 0);
                 });
                 break;
             case 'name-asc':
@@ -789,8 +800,17 @@ class PaymentDashboard {
         document.getElementById('compactViewBtn').classList.toggle('active', this.viewMode === 'compact');
         document.getElementById('detailedViewBtn').classList.toggle('active', this.viewMode === 'detailed');
         
+        // Show/hide custom option based on whether custom layout exists
+        const sortSelect = document.getElementById('sortSelect');
+        const customOption = sortSelect.querySelector('option[value="custom"]');
+        const hasCustomLayout = this.viewLayout?.layout?.widgets && this.viewLayout.layout.widgets.length > 0;
+        
+        if (customOption) {
+            customOption.style.display = hasCustomLayout ? '' : 'none';
+        }
+        
         // Update sort select
-        document.getElementById('sortSelect').value = this.sortBy;
+        sortSelect.value = this.sortBy;
         
         // Update filter select
         document.getElementById('filterSelect').value = this.filterBy;
@@ -1071,6 +1091,7 @@ class PaymentDashboard {
         const widget = document.createElement('div');
         widget.className = 'widget widget-loading';
         widget.dataset.projectId = project.id;
+        widget.draggable = true;
         
         widget.innerHTML = `
             <div class="widget-header">
@@ -1116,6 +1137,25 @@ class PaymentDashboard {
         // Update summary section and overview graph
         this.renderSummarySection(this.config.projects);
         this.renderOverviewGraph(this.config.projects);
+    }
+
+    reorderWidgets() {
+        // Get the current sorted and filtered order
+        let orderedProjects = this.getOrderedProjects();
+        orderedProjects = this.sortProjects(orderedProjects);
+        orderedProjects = this.filterProjects(orderedProjects);
+
+        const container = document.getElementById('widgetContainer');
+        if (!container) return;
+
+        // Reorder DOM elements to match the sorted order
+        orderedProjects.forEach((project, index) => {
+            const widgetData = this.widgets.find(w => w.projectId === project.id);
+            if (widgetData && widgetData.element) {
+                // Move element to correct position (appendChild moves existing elements)
+                container.appendChild(widgetData.element);
+            }
+        });
     }
 
     getProjectWidgetHTML(project, salesData) {
@@ -2003,12 +2043,21 @@ class PaymentDashboard {
 
 
     initializeDragAndDrop() {
-        // Only enable drag and drop in default sort mode
-        if (this.sortBy !== 'default') return;
-        
+        // Enable drag and drop in default and custom sort modes
         const widgets = document.querySelectorAll('.widget');
         
+        if (this.sortBy !== 'default' && this.sortBy !== 'custom') {
+            // Disable dragging for non-draggable modes
+            widgets.forEach(widget => {
+                widget.style.cursor = 'default';
+                widget.draggable = false;
+            });
+            return;
+        }
+        
         widgets.forEach(widget => {
+            widget.style.cursor = 'grab';
+            widget.draggable = true;
             widget.addEventListener('dragstart', this.handleDragStart.bind(this));
             widget.addEventListener('dragend', this.handleDragEnd.bind(this));
             widget.addEventListener('dragover', this.handleDragOver.bind(this));
@@ -2021,18 +2070,43 @@ class PaymentDashboard {
     handleDragStart(e) {
         this.draggedElement = e.currentTarget;
         this.draggedIndex = parseInt(e.currentTarget.dataset.index);
+        e.currentTarget.style.cursor = 'grabbing';
         e.currentTarget.classList.add('dragging');
         e.dataTransfer.effectAllowed = 'move';
         e.dataTransfer.setData('text/html', e.currentTarget.innerHTML);
+        
+        // Add visual feedback to all other widgets
+        setTimeout(() => {
+            document.querySelectorAll('.widget:not(.dragging)').forEach(widget => {
+                widget.style.transition = 'transform 0.3s ease, opacity 0.3s ease';
+            });
+        }, 0);
     }
 
     handleDragEnd(e) {
-        e.currentTarget.classList.remove('dragging');
+        const element = e.currentTarget;
         
-        // Remove all drag-over classes
+        // Clean up all dragging styles immediately without transition
+        element.style.transition = 'none';
+        element.classList.remove('dragging');
+        element.style.cursor = 'grab';
+        element.style.opacity = '';
+        element.style.transform = '';
+        // Force reflow
+        void element.offsetHeight;
+        // Re-enable transitions
+        element.style.transition = '';
+        
+        // Remove all drag-over classes and reset transitions
         document.querySelectorAll('.widget').forEach(widget => {
             widget.classList.remove('drag-over');
+            if (widget !== element) {
+                widget.style.transition = '';
+            }
         });
+        
+        // Reset the dragged element reference
+        this.draggedElement = null;
     }
 
     handleDragOver(e) {
@@ -2044,13 +2118,50 @@ class PaymentDashboard {
     }
 
     handleDragEnter(e) {
-        if (e.currentTarget !== this.draggedElement && !e.currentTarget.classList.contains('summary-widget')) {
-            e.currentTarget.classList.add('drag-over');
+        const target = e.currentTarget;
+        if (target !== this.draggedElement && !target.classList.contains('summary-widget')) {
+            // Remove drag-over from all other widgets first
+            document.querySelectorAll('.widget.drag-over').forEach(widget => {
+                if (widget !== target) {
+                    widget.classList.remove('drag-over');
+                }
+            });
+            target.classList.add('drag-over');
+            
+            // Preview the final layout by temporarily reordering
+            this.previewDropPosition(target);
+        }
+    }
+    
+    previewDropPosition(dropTarget) {
+        if (!this.draggedElement || this.draggedElement === dropTarget) return;
+        
+        const container = document.getElementById('widgetContainer');
+        const allWidgets = [...container.querySelectorAll('.widget')];
+        
+        const draggedIndex = allWidgets.indexOf(this.draggedElement);
+        const dropIndex = allWidgets.indexOf(dropTarget);
+        
+        if (draggedIndex === -1 || dropIndex === -1) return;
+        
+        // Temporarily reorder DOM to show preview
+        if (draggedIndex < dropIndex) {
+            // Moving down - insert after drop target
+            dropTarget.parentNode.insertBefore(this.draggedElement, dropTarget.nextSibling);
+        } else {
+            // Moving up - insert before drop target
+            dropTarget.parentNode.insertBefore(this.draggedElement, dropTarget);
         }
     }
 
     handleDragLeave(e) {
-        e.currentTarget.classList.remove('drag-over');
+        // Only remove if we're actually leaving (not entering a child element)
+        const target = e.currentTarget;
+        const relatedTarget = e.relatedTarget;
+        
+        if (!target.contains(relatedTarget)) {
+            target.classList.remove('drag-over');
+        }
     }
 
     handleDrop(e) {
@@ -2060,6 +2171,19 @@ class PaymentDashboard {
 
         const dropTarget = e.currentTarget;
         
+        // Immediately clean up dragging styles without transition
+        if (this.draggedElement) {
+            this.draggedElement.style.transition = 'none';
+            this.draggedElement.classList.remove('dragging');
+            this.draggedElement.style.cursor = 'grab';
+            this.draggedElement.style.opacity = '';
+            this.draggedElement.style.transform = '';
+            // Force reflow to apply the changes immediately
+            void this.draggedElement.offsetHeight;
+            // Re-enable transitions
+            this.draggedElement.style.transition = '';
+        }
+        
         if (this.draggedElement !== dropTarget) {
             const container = document.getElementById('widgetContainer');
             const allWidgets = [...container.querySelectorAll('.widget')];
@@ -2067,20 +2191,40 @@ class PaymentDashboard {
             const draggedIndex = allWidgets.indexOf(this.draggedElement);
             const dropIndex = allWidgets.indexOf(dropTarget);
             
-            if (draggedIndex < dropIndex) {
-                dropTarget.parentNode.insertBefore(this.draggedElement, dropTarget.nextSibling);
-            } else {
-                dropTarget.parentNode.insertBefore(this.draggedElement, dropTarget);
+            // Only reorder if not already in position (from preview)
+            if (draggedIndex !== -1 && dropIndex !== -1) {
+                if (draggedIndex < dropIndex) {
+                    dropTarget.parentNode.insertBefore(this.draggedElement, dropTarget.nextSibling);
+                } else if (draggedIndex > dropIndex) {
+                    dropTarget.parentNode.insertBefore(this.draggedElement, dropTarget);
+                }
             }
+            
+            // Switch to custom sort mode
+            this.sortBy = 'custom';
+            
+            // Show custom option in dropdown
+            const sortSelect = document.getElementById('sortSelect');
+            const customOption = sortSelect.querySelector('option[value="custom"]');
+            if (customOption) {
+                customOption.style.display = '';
+            }
+            sortSelect.value = 'custom';
             
             // Update widgets array
             this.updateWidgetsOrder();
             
-            // Save the new layout
+            // Save the new layout with custom sort
             this.saveViewLayout();
         }
 
+        // Clean up all drag states
         dropTarget.classList.remove('drag-over');
+        document.querySelectorAll('.widget').forEach(widget => {
+            widget.classList.remove('drag-over');
+            widget.style.transition = '';
+        });
+        
         return false;
     }
 
@@ -2142,7 +2286,21 @@ class PaymentDashboard {
         
         // Sort control
         document.getElementById('sortSelect').addEventListener('change', async (e) => {
+            const oldSortBy = this.sortBy;
             this.sortBy = e.target.value;
+            
+            // If changing away from custom, clear the layout and hide custom option
+            if (oldSortBy === 'custom' && this.sortBy !== 'custom') {
+                if (this.viewLayout && this.viewLayout.layout) {
+                    this.viewLayout.layout.widgets = [];
+                }
+                // Hide custom option
+                const customOption = e.target.querySelector('option[value="custom"]');
+                if (customOption) {
+                    customOption.style.display = 'none';
+                }
+            }
+            
             this.savePreferences();
             await this.renderDashboard();
         });

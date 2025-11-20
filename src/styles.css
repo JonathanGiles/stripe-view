@@ -532,7 +532,7 @@ body {
     border-radius: var(--border-radius);
     box-shadow: var(--shadow-md);
     padding: 1.5rem;
-    transition: var(--transition);
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
     position: relative;
     cursor: move;
     border: 1px solid var(--border-color);
@@ -542,14 +542,33 @@ body {
 }
 
 .widget.dragging {
-    opacity: 0.5;
+    opacity: 0.4;
     cursor: grabbing;
-    transform: scale(1.05);
-    box-shadow: var(--shadow-lg);
+    transform: scale(1.08) rotate(2deg);
+    box-shadow: 0 20px 50px rgba(0, 0, 0, 0.3);
     z-index: 1000;
+    border: 2px solid rgba(var(--theme-primary-rgb), 0.6);
+    transition: all 0.2s ease;
 }
 
-.widget:hover {
+.widget.drag-over {
+    transform: scale(0.95);
+    border: 2px dashed rgba(var(--theme-primary-rgb), 0.8);
+    background: rgba(var(--theme-primary-rgb), 0.08);
+    box-shadow: 0 0 0 3px rgba(var(--theme-primary-rgb), 0.15);
+    animation: pulse-border 1s ease-in-out infinite;
+}
+
+@keyframes pulse-border {
+    0%, 100% {
+        box-shadow: 0 0 0 3px rgba(var(--theme-primary-rgb), 0.15);
+    }
+    50% {
+        box-shadow: 0 0 0 6px rgba(var(--theme-primary-rgb), 0.25);
+    }
+}
+
+.widget:hover:not(.dragging):not(.drag-over) {
     box-shadow: var(--shadow-xl);
     transform: translateY(-2px);
     border-color: rgba(var(--theme-primary-rgb), 0.3);
