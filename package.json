@@ -1,6 +1,6 @@
 {
   "name": "stripe-view",
-  "version": "0.0.10",
+  "version": "0.0.11",
   "description": "Desktop application to view Stripe and PayPal revenue analytics",
   "main": "src/server.js",
   "bin": "src/server.js",
