@@ -13,6 +13,8 @@ class PaymentDashboard {
         this.preferredCurrency = 'NZD';
         this.themeMode = 'light'; // 'light' or 'dark'
         this.themeColor = 'purple'; // 'purple', 'blue', 'green', 'red', 'orange', 'yellow'
+        this.projectsPerRow = 2; // Number of projects per row (1-6)
+        this.saleNotificationDuration = 15; // Duration in seconds for sale notifications (default 15s)
         this.exchangeRates = {};
         this.pollingInterval = null;
         this.lastSalesCount = new Map(); // Track sales count per project for change detection
@@ -21,6 +23,9 @@ class PaymentDashboard {
         this.projectsData = new Map();
         this.lastRefreshTime = Date.now();
         this.countdownInterval = null;
+        this.notifications = []; // Store all notifications
+        this.unreadNotifications = 0; // Count of unread notifications
+        this.notificationUpdateInterval = null; // Timer for updating notification timestamps
         
         this.init();
     }
@@ -36,6 +41,7 @@ class PaymentDashboard {
             this.setupEventListeners();
             this.startCountdownTimer();
             this.startAutoRefresh(); // Start automatic polling
+            this.startNotificationUpdater(); // Start updating notification timestamps
             this.hideLoading();
         } catch (error) {
             console.error('Initialization error:', error);
@@ -66,8 +72,6 @@ class PaymentDashboard {
             if (!response.ok) throw new Error('Failed to fetch exchange rates');
             const data = await response.json();
             this.exchangeRates = data.rates;
-            console.log(`✓ Exchange rates loaded (1 USD = ${this.exchangeRates[this.preferredCurrency]} ${this.preferredCurrency})`);
-            console.log(`Available currencies: ${Object.keys(this.exchangeRates).join(', ')}`);
         } catch (error) {
             console.warn('Could not fetch exchange rates, using defaults:', error);
             // Fallback rates if API fails
@@ -107,7 +111,6 @@ class PaymentDashboard {
     startAutoRefresh() {
         // Get polling interval from config (default 60 seconds)
         const intervalSeconds = this.config.pollingIntervalSeconds || 60;
-        console.log(`🔄 Auto-refresh enabled: every ${intervalSeconds} seconds`);
         
         // Clear any existing interval
         if (this.pollingInterval) {
@@ -116,19 +119,19 @@ class PaymentDashboard {
         
         // Start polling
         this.pollingInterval = setInterval(async () => {
-            const refreshStartTime = Date.now();
-            console.log(`⏰ Refresh triggered at ${new Date().toLocaleTimeString()}`);
             await this.refreshData();
-            const refreshDuration = ((Date.now() - refreshStartTime) / 1000).toFixed(1);
-            console.log(`✓ Refresh completed in ${refreshDuration}s`);
         }, intervalSeconds * 1000);
     }
 
     async refreshData() {
         try {
-            console.log('🔄 Background refresh...');
+            const refreshStartTime = Date.now();
             const oldProjectsData = new Map(this.projectsData);
             let hasChanges = false;
+            const refreshLog = {
+                timestamp: new Date().toISOString(),
+                projects: []
+            };
             
             // Fetch fresh data for each project
             const fetchPromises = this.config.projects.map(async (project) => {
@@ -146,21 +149,26 @@ class PaymentDashboard {
                         JSON.stringify(oldData.revenueData) !== JSON.stringify(newData.revenueData);
                     
                     if (dataChanged) {
-                        console.log(`📊 Data changed for ${project.name}:`, {
-                            revenue: oldData?.revenue !== newData.revenue ? `${oldData?.revenue} → ${newData.revenue}` : 'unchanged',
-                            today: oldData?.todayRevenue !== newData.todayRevenue ? `${oldData?.todayRevenue} → ${newData.todayRevenue}` : 'unchanged',
-                            sales: oldData?.sales !== newData.sales ? `${oldData?.sales} → ${newData.sales}` : 'unchanged'
-                        });
                         this.projectsData.set(project.id, newData);
                         hasChanges = true;
                         
                         // Update only this project's widget
                         this.updateProjectWidget(project);
                     } else {
-                        console.log(`✓ No changes for ${project.name}, skipping UI update`);
                         // Keep existing data in cache (it's already there)
                         this.projectsData.set(project.id, oldData);
                     }
+                    
+                    // Add to structured log
+                    refreshLog.projects.push({
+                        name: project.name,
+                        changed: dataChanged,
+                        revenue: newData.revenue,
+                        orders: newData.orders,
+                        stripeBalance: newData.stripeBalance,
+                        paypalBalance: newData.paypalBalance,
+                        errors: newData.errors || []
+                    });
                     
                     return { project, changed: dataChanged };
                 } catch (error) {
@@ -174,18 +182,18 @@ class PaymentDashboard {
             
             // Only update summary/overview if any data changed
             if (hasChanges) {
-                console.log('📈 Updating summary and overview (data changed)');
                 this.renderSummarySection(this.config.projects);
                 this.renderOverviewGraph(this.config.projects);
-            } else {
-                console.log('✓ No data changes detected, UI unchanged');
             }
             
             // Update refresh time and restart countdown
             this.lastRefreshTime = Date.now();
             this.startCountdownTimer(); // Restart the countdown
             
-            console.log('✓ Background refresh complete');
+            // Output consolidated structured log
+            const refreshDuration = ((Date.now() - refreshStartTime) / 1000).toFixed(2);
+            refreshLog.duration = `${refreshDuration}s`;
+            refreshLog.changesDetected = hasChanges;
             
             // Check for new sales and play sound
             this.detectNewSales(oldProjectsData);
@@ -198,7 +206,7 @@ class PaymentDashboard {
     }
 
     detectNewSales(oldProjectsData) {
-        let hasNewSales = false;
+        const newSales = [];
         
         for (const [projectId, newData] of this.projectsData.entries()) {
             const oldData = oldProjectsData.get(projectId);
@@ -207,14 +215,23 @@ class PaymentDashboard {
             // Check if order count increased
             if (newData.orders > oldData.orders) {
                 const newSalesCount = newData.orders - oldData.orders;
-                console.log(`🎉 New sale detected in ${projectId}: ${newSalesCount} new order(s)!`);
-                hasNewSales = true;
+                const revenueIncrease = newData.revenue - oldData.revenue;
+                const projectConfig = this.config.projects.find(p => p.id === projectId);
+                const projectName = projectConfig ? projectConfig.name : projectId;
+                
+                newSales.push({
+                    projectId,
+                    projectName,
+                    count: newSalesCount,
+                    amount: revenueIncrease
+                });
             }
         }
         
-        if (hasNewSales) {
+        if (newSales.length > 0) {
             this.playSaleSound();
             this.showConfetti();
+            this.showSaleNotifications(newSales);
         }
     }
 
@@ -292,6 +309,251 @@ class PaymentDashboard {
         setTimeout(shoot, 200);
     }
 
+    updateGridColumns() {
+        const container = document.querySelector('.widget-container');
+        if (!container) return;
+        
+        // Update CSS custom property for grid columns
+        container.style.gridTemplateColumns = `repeat(${this.projectsPerRow}, 1fr)`;
+        
+        // Force layout reflow to ensure immediate visual update
+        void container.offsetHeight;
+    }
+
+    showSaleNotifications(sales) {
+        sales.forEach((sale, index) => {
+            // Play sound for each sale
+            setTimeout(() => {
+                this.playSaleSound();
+            }, index * 300);
+
+            // Add to notifications system
+            this.addNotification({
+                id: Date.now() + index,
+                type: 'sale',
+                projectId: sale.projectId,
+                projectName: sale.projectName,
+                amount: sale.amount,
+                timestamp: Date.now(),
+                read: false
+            });
+
+            // Flash the project widget
+            setTimeout(() => {
+                const widget = document.querySelector(`[data-project-id="${sale.projectId}"]`);
+                if (widget) {
+                    widget.classList.add('flash-sale');
+                    // Only scroll to the first sale if multiple sales
+                    if (index === 0) {
+                        widget.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    }
+                    // Remove animation class after duration completes
+                    setTimeout(() => {
+                        widget.classList.remove('flash-sale');
+                    }, this.saleNotificationDuration * 1000);
+                }
+            }, index * 200);
+
+            // Show toast notification
+            setTimeout(() => {
+                this.showSaleToast(sale);
+            }, index * 200 + 100);
+        });
+    }
+
+    showSaleToast(sale) {
+        const toast = document.createElement('div');
+        toast.className = 'sale-toast';
+        toast.innerHTML = `
+            <div class="sale-toast-icon">🎉</div>
+            <div class="sale-toast-content">
+                <div class="sale-toast-title">New Sale!</div>
+                <div class="sale-toast-amount">${this.formatCurrency(sale.amount)}</div>
+                <div class="sale-toast-project">${sale.projectName}</div>
+            </div>
+            <button class="sale-toast-close" title="Dismiss">×</button>
+        `;
+        
+        document.body.appendChild(toast);
+        
+        // Stack multiple toasts vertically
+        const existingToasts = document.querySelectorAll('.sale-toast');
+        if (existingToasts.length > 1) {
+            let offset = 100;
+            existingToasts.forEach((t, index) => {
+                if (t !== toast) {
+                    offset += 100 + (index * 120);
+                }
+            });
+            toast.style.top = `${offset}px`;
+        }
+        
+        const removeToast = () => {
+            toast.classList.add('fade-out');
+            setTimeout(() => {
+                if (toast.parentNode) {
+                    document.body.removeChild(toast);
+                    // Reposition remaining toasts
+                    this.repositionToasts();
+                }
+            }, 500);
+        };
+        
+        // Remove toast after notification duration (default to 15 seconds if not set)
+        const duration = (this.saleNotificationDuration || 15) * 1000;
+        const timeoutId = setTimeout(removeToast, duration);
+        
+        // Add click handler to close button
+        const closeBtn = toast.querySelector('.sale-toast-close');
+        closeBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            clearTimeout(timeoutId);
+            removeToast();
+        });
+    }
+
+    repositionToasts() {
+        const toasts = document.querySelectorAll('.sale-toast:not(.fade-out)');
+        toasts.forEach((toast, index) => {
+            toast.style.top = `${100 + (index * 120)}px`;
+        });
+    }
+
+    addNotification(notification) {
+        this.notifications.unshift(notification); // Add to beginning
+        if (!notification.read) {
+            this.unreadNotifications++;
+        }
+        this.updateNotificationUI();
+        this.renderNotifications();
+    }
+
+    markAllNotificationsRead() {
+        this.notifications.forEach(n => n.read = true);
+        this.unreadNotifications = 0;
+        this.updateNotificationUI();
+        this.renderNotifications();
+    }
+
+    clearAllNotifications() {
+        this.notifications = [];
+        this.unreadNotifications = 0;
+        this.updateNotificationUI();
+        this.renderNotifications();
+    }
+
+    updateNotificationUI() {
+        const countBadge = document.getElementById('notificationCount');
+        const headerBadge = document.getElementById('notificationsBadge');
+        
+        if (this.unreadNotifications > 0) {
+            countBadge.textContent = this.unreadNotifications;
+            countBadge.style.display = 'block';
+            headerBadge.textContent = this.unreadNotifications;
+            headerBadge.style.display = 'inline-block';
+        } else {
+            countBadge.style.display = 'none';
+            headerBadge.style.display = 'none';
+        }
+    }
+
+    renderNotifications() {
+        const container = document.getElementById('notificationsContent');
+        
+        if (this.notifications.length === 0) {
+            container.innerHTML = `
+                <div class="notifications-empty">
+                    <div class="notifications-empty-icon">🔔</div>
+                    <div class="notifications-empty-text">No notifications yet</div>
+                </div>
+            `;
+            return;
+        }
+
+        container.innerHTML = this.notifications.map(notif => {
+            const timeAgo = this.getTimeAgo(notif.timestamp);
+            return `
+                <div class="notification-item ${notif.read ? '' : 'unread'}" data-notification-id="${notif.id}">
+                    <div class="notification-header">
+                        <div class="notification-title">
+                            <span class="notification-icon">🎉</span>
+                            New Sale
+                        </div>
+                        <div class="notification-time">${timeAgo}</div>
+                    </div>
+                    <div class="notification-content">
+                        <div class="notification-amount">${this.formatCurrency(notif.amount)}</div>
+                        <div class="notification-project">${notif.projectName}</div>
+                    </div>
+                </div>
+            `;
+        }).join('');
+
+        // Add click handlers to scroll to projects
+        container.querySelectorAll('.notification-item').forEach(item => {
+            item.addEventListener('click', () => {
+                const projectId = this.notifications.find(n => n.id == item.dataset.notificationId)?.projectId;
+                if (projectId) {
+                    const widget = document.querySelector(`[data-project-id="${projectId}"]`);
+                    if (widget) {
+                        widget.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                        
+                        // Add highlight glow for 5 seconds
+                        widget.classList.add('notification-highlight');
+                        setTimeout(() => {
+                            widget.classList.remove('notification-highlight');
+                        }, 5000);
+                        
+                        // Close notifications blade
+                        document.getElementById('notificationsBlade').classList.remove('open');
+                        document.getElementById('settingsOverlay').classList.remove('active');
+                    }
+                }
+            });
+        });
+    }
+
+    startNotificationUpdater() {
+        // Clear existing interval if any
+        if (this.notificationUpdateInterval) {
+            clearInterval(this.notificationUpdateInterval);
+        }
+        
+        // Update notification timestamps every 30 seconds
+        this.notificationUpdateInterval = setInterval(() => {
+            this.updateNotificationTimestamps();
+        }, 30000);
+    }
+
+    updateNotificationTimestamps() {
+        // Only update if notifications blade is open and has notifications
+        const blade = document.getElementById('notificationsBlade');
+        if (!blade || !blade.classList.contains('open') || this.notifications.length === 0) {
+            return;
+        }
+        
+        // Update each timestamp without re-rendering the entire list
+        const items = document.querySelectorAll('.notification-item');
+        items.forEach((item, index) => {
+            const notif = this.notifications[index];
+            if (notif) {
+                const timeEl = item.querySelector('.notification-time');
+                if (timeEl) {
+                    timeEl.textContent = this.getTimeAgo(notif.timestamp);
+                }
+            }
+        });
+    }
+
+    getTimeAgo(timestamp) {
+        const seconds = Math.floor((Date.now() - timestamp) / 1000);
+        
+        if (seconds < 60) return 'Just now';
+        if (seconds < 3600) return `${Math.floor(seconds / 60)}m ago`;
+        if (seconds < 86400) return `${Math.floor(seconds / 3600)}h ago`;
+        return `${Math.floor(seconds / 86400)}d ago`;
+    }
+
     formatCurrency(amount, sourceCurrency = null) {
         // If no source currency specified, assume amount is already in display currency
         const finalAmount = sourceCurrency 
@@ -327,15 +589,24 @@ class PaymentDashboard {
     loadPreferences() {
         // Load from view.json (already loaded in loadViewLayout)
         if (this.viewLayout && this.viewLayout.preferences) {
-            const { viewMode, sortBy, filterBy, preferredCurrency, themeMode, themeColor } = this.viewLayout.preferences;
+            const { viewMode, sortBy, filterBy, preferredCurrency, themeMode, themeColor, projectsPerRow, saleNotificationDuration } = this.viewLayout.preferences;
             this.viewMode = viewMode || 'compact';
             this.sortBy = sortBy || 'default';
             this.filterBy = filterBy || 'all';
             this.preferredCurrency = preferredCurrency || 'NZD';
             this.themeMode = themeMode || 'light';
             this.themeColor = themeColor || 'purple';
+            this.projectsPerRow = projectsPerRow || 2;
+            this.saleNotificationDuration = saleNotificationDuration || 15;
         }
         this.applyTheme();
+        this.updateGridColumns();
+        this.updateSaleAnimationDuration();
+    }
+
+    updateSaleAnimationDuration() {
+        // Set CSS variable for animation duration
+        document.documentElement.style.setProperty('--sale-animation-duration', `${this.saleNotificationDuration}s`);
     }
 
     savePreferences() {
@@ -357,6 +628,8 @@ class PaymentDashboard {
                     sortBy: this.sortBy,
                     filterBy: this.filterBy,
                     preferredCurrency: this.preferredCurrency,
+                    projectsPerRow: this.projectsPerRow,
+                    saleNotificationDuration: this.saleNotificationDuration,
                     themeMode: this.themeMode,
                     themeColor: this.themeColor
                 }
@@ -370,8 +643,6 @@ class PaymentDashboard {
             });
 
             if (!response.ok) throw new Error('Failed to save to server');
-            
-            console.log('Layout saved to view.json:', layoutData);
         } catch (error) {
             console.error('Failed to save layout:', error);
         }
@@ -389,8 +660,6 @@ class PaymentDashboard {
         document.querySelectorAll('.theme-color-btn').forEach(btn => {
             btn.classList.toggle('active', btn.dataset.color === this.themeColor);
         });
-        
-        console.log(`✓ Theme applied: ${this.themeMode} mode, ${this.themeColor} color`);
     }
 
     getThemeColors() {
@@ -783,14 +1052,6 @@ class PaymentDashboard {
                 </div>
                 ` : ''}
                 
-                ${salesData.errors && salesData.errors.length > 0 ? `
-                <div class="widget-errors">
-                    <div class="error-icon">⚠️</div>
-                    <div class="error-messages">
-                        ${salesData.errors.map(err => `<div class="error-item">${err}</div>`).join('')}
-                    </div>
-                </div>
-                ` : ''}
             </div>
         `;
         
@@ -873,10 +1134,10 @@ class PaymentDashboard {
         const trendIcon = parseFloat(salesData.growth) > 0 ? '↗' : parseFloat(salesData.growth) < 0 ? '↘' : '→';
         const trendClass = parseFloat(salesData.growth) > 0 ? 'up' : parseFloat(salesData.growth) < 0 ? 'down' : 'flat';
         
-        // Calculate today's metrics
+        // Calculate today's metrics (compare to 7-day average for more meaningful trend)
         const today = salesData.todayRevenue || 0;
-        const yesterday = salesData.yesterdayRevenue || 0;
-        const todayChange = yesterday > 0 ? (((today - yesterday) / yesterday) * 100).toFixed(1) : '0.0';
+        const sevenDayAvg = salesData.sevenDayAvg || 0;
+        const todayChange = sevenDayAvg > 0 ? (((today - sevenDayAvg) / sevenDayAvg) * 100).toFixed(1) : '0.0';
         const todayTrend = parseFloat(todayChange) > 0 ? 'up' : parseFloat(todayChange) < 0 ? 'down' : 'flat';
         
         // Generate favicon URL directly from Google's service
@@ -898,7 +1159,14 @@ class PaymentDashboard {
                         ${project.name}
                     </h2>
                 </div>
-                <div class="widget-drag-handle" title="Drag to reorder">⋮⋮</div>
+                <div style="display: flex; align-items: center; gap: 0.5rem;">
+                    ${salesData.errors && salesData.errors.length > 0 ? `
+                    <div class="widget-error-indicator" data-errors='${JSON.stringify(salesData.errors)}'>
+                        ⚠️
+                    </div>
+                    ` : ''}
+                    <div class="widget-drag-handle" title="Drag to reorder">⋮⋮</div>
+                </div>
             </div>
             <div class="widget-content">
                 <!-- Key Metrics Row -->
@@ -922,7 +1190,7 @@ class PaymentDashboard {
                     <div class="metric-item">
                         <div class="metric-label">Balance</div>
                         <div class="metric-value-large">${this.formatCurrency(salesData.stripeBalance + salesData.paypalBalance)}</div>
-                        <div class="metric-sub">${hasStripe ? 'Stripe: ' + this.formatCurrency(salesData.stripeBalance) : ''}${hasStripe && hasPaypal ? ' | ' : ''}${hasPaypal ? 'PayPal: ' + this.formatCurrency(salesData.paypalBalance) : ''}</div>
+                        <div class="balance-info-icon" data-balance-breakdown='${JSON.stringify({stripe: salesData.stripeBalance, paypal: salesData.paypalBalance, hasStripe, hasPaypal})}'>ⓘ</div>
                     </div>
                     ` : ''}
                 </div>
@@ -950,37 +1218,39 @@ class PaymentDashboard {
                     </div>
                 </div>
                 ` : ''}
-                
-                ${salesData.errors && salesData.errors.length > 0 ? `
-                <div class="widget-errors">
-                    <div class="error-icon">⚠️</div>
-                    <div class="error-messages">
-                        ${salesData.errors.map(err => `<div class="error-item">${err}</div>`).join('')}
-                    </div>
-                </div>
-                ` : ''}
             </div>
         `;
     }
 
     getErrorWidgetHTML(project, errorMessage) {
-        const hasStripe = project.stripe?.enabled;
-        const hasPaypal = project.paypal?.enabled;
-        const providerClass = hasStripe && hasPaypal ? 'both' : hasStripe ? 'stripe' : 'paypal';
-        const providerText = hasStripe && hasPaypal ? 'Stripe + PayPal' : hasStripe ? 'Stripe' : 'PayPal';
+        // Generate favicon URL directly from Google's service
+        let faviconHtml = '';
+        if (project.website) {
+            try {
+                const domain = new URL(project.website).hostname;
+                faviconHtml = `<img src="https://www.google.com/s2/favicons?domain=${domain}&sz=128" class="project-favicon" alt="" onerror="this.style.display='none'">`;
+            } catch (err) {
+                // Invalid URL, skip favicon
+            }
+        }
 
         return `
             <div class="widget-header">
-                <div>
-                    <h2 class="widget-title">🔴 ${project.name}</h2>
+                <div class="widget-title-container">
+                    ${faviconHtml}
+                    <h2 class="widget-title">${project.name}</h2>
+                </div>
+                <div class="widget-error-indicator" data-errors='${JSON.stringify([errorMessage])}'>
+                    ⚠️
                 </div>
             </div>
             <div class="widget-content">
-                <div class="error-state-large">
-                    <div class="error-icon">⚠️</div>
-                    <div class="error-title">Failed to Load Data</div>
-                    <div class="error-details">${errorMessage}</div>
-                    <button class="btn btn-retry" onclick="location.reload()">Retry</button>
+                <div class="metrics-compact">
+                    <div class="metric-item">
+                        <div class="metric-label">Status</div>
+                        <div class="metric-value-large" style="color: #f56565;">⚠️ Error</div>
+                        <div class="metric-sub">Hover warning icon for details</div>
+                    </div>
                 </div>
             </div>
         `;
@@ -997,20 +1267,34 @@ class PaymentDashboard {
         widget.dataset.projectId = project.id;
         widget.dataset.index = index;
         
+        // Generate favicon URL directly from Google's service
+        let faviconHtml = '';
+        if (project.website) {
+            try {
+                const domain = new URL(project.website).hostname;
+                faviconHtml = `<img src="https://www.google.com/s2/favicons?domain=${domain}&sz=128" class="project-favicon" alt="" onerror="this.style.display='none'">`;
+            } catch (err) {
+                // Invalid URL, skip favicon
+            }
+        }
+        
         widget.innerHTML = `
             <div class="widget-header">
-                <div>
-                    <h2 class="widget-title">
-                        🔴 ${project.name}
-                    </h2>
+                <div class="widget-title-container">
+                    ${faviconHtml}
+                    <h2 class="widget-title">${project.name}</h2>
+                </div>
+                <div class="widget-error-indicator" data-errors='${JSON.stringify([errorMessage])}'>
+                    ⚠️
                 </div>
             </div>
             <div class="widget-content">
-                <div class="error-state-large">
-                    <div class="error-icon-large">❌</div>
-                    <h3>Failed to Load Data</h3>
-                    <p class="error-details">${errorMessage}</p>
-                    <button class="btn btn-primary" onclick="location.reload()">Retry</button>
+                <div class="metrics-compact">
+                    <div class="metric-item">
+                        <div class="metric-label">Status</div>
+                        <div class="metric-value-large" style="color: #f56565;">⚠️ Error</div>
+                        <div class="metric-sub">Hover warning icon for details</div>
+                    </div>
                 </div>
             </div>
         `;
@@ -1432,18 +1716,11 @@ class PaymentDashboard {
                     ...(stripeData.balance.pending || [])
                 ];
                 
-                // Log for verification
-                console.log('🔍 RAW Stripe Balance Data:', JSON.stringify(stripeData.balance, null, 2));
-                const availableTotal = (stripeData.balance.available || []).reduce((sum, b) => sum + b.amount / 100, 0);
-                const pendingTotal = (stripeData.balance.pending || []).reduce((sum, b) => sum + b.amount / 100, 0);
-                console.log(`Stripe Balance Calculation: Available $${availableTotal.toLocaleString()} + Pending $${pendingTotal.toLocaleString()} = Total $${(availableTotal + pendingTotal).toLocaleString()}`);
-                
                 // Sum by currency
                 const balanceByCurrency = new Map();
                 allBalances.forEach(bal => {
                     const currency = (bal.currency || 'usd').toUpperCase();
                     const amount = bal.amount / 100;
-                    console.log(`  - Balance: ${amount} ${currency} (raw: ${bal.amount} cents)`);
                     balanceByCurrency.set(
                         currency, 
                         (balanceByCurrency.get(currency) || 0) + amount
@@ -1452,7 +1729,6 @@ class PaymentDashboard {
                 
                 // Convert to array
                 balanceByCurrency.forEach((amount, currency) => {
-                    console.log(`  → Total in ${currency}: ${amount.toLocaleString()}`);
                     stripeBalances.push({ amount, currency });
                 });
             }
@@ -1509,13 +1785,10 @@ class PaymentDashboard {
         const avgOrderValue = totalOrders > 0 ? Math.floor(totalRevenue / totalOrders) : 0;
         
         // Calculate balances in display currency
-        console.log(`💱 Converting to display currency (${this.preferredCurrency}):`);
         stripeBalance = stripeBalances.reduce((sum, item) => {
             const converted = this.convertCurrency(item.amount, item.currency);
-            console.log(`  - ${item.amount} ${item.currency} → ${converted.toFixed(2)} ${this.preferredCurrency}`);
             return sum + converted;
         }, 0);
-        console.log(`  ✓ Final Stripe Balance: ${stripeBalance.toFixed(2)} ${this.preferredCurrency}`);
         
         paypalBalance = paypalBalances.reduce((sum, item) => {
             return sum + this.convertCurrency(item.amount, item.currency);
@@ -1549,6 +1822,12 @@ class PaymentDashboard {
         
         const todayRevenue = Math.round(revenueData[revenueData.length - 1] || 0);
         const yesterdayRevenue = Math.round(revenueData[revenueData.length - 2] || 0);
+        
+        // Calculate 7-day average for more stable comparison
+        const last7Days = revenueData.slice(-7);
+        const sevenDayAvg = last7Days.length > 0 
+            ? Math.round(last7Days.reduce((sum, val) => sum + val, 0) / last7Days.length)
+            : 0;
         
         // Format recent activity from charges
         const recentActivity = [];
@@ -1627,6 +1906,7 @@ class PaymentDashboard {
             growth,
             todayRevenue: Math.round(todayRevenue),
             yesterdayRevenue: Math.round(yesterdayRevenue),
+            sevenDayAvg: sevenDayAvg,
             labels,
             revenueData: revenueData.map(v => Math.round(v)),
             stripeBalance: Math.round(stripeBalance),
@@ -1832,6 +2112,20 @@ class PaymentDashboard {
         document.getElementById('filterSelect').value = this.filterBy;
         document.getElementById('currencySelect').value = this.preferredCurrency;
         
+        // Projects per row slider
+        const slider = document.getElementById('projectsPerRowSlider');
+        const sliderValue = document.getElementById('projectsPerRowValue');
+        slider.value = this.projectsPerRow;
+        sliderValue.textContent = this.projectsPerRow;
+        
+        slider.addEventListener('input', (e) => {
+            const value = parseInt(e.target.value);
+            sliderValue.textContent = value;
+            this.projectsPerRow = value;
+            this.updateGridColumns();
+            this.savePreferences();
+        });
+        
         // Sort control
         document.getElementById('sortSelect').addEventListener('change', async (e) => {
             this.sortBy = e.target.value;
@@ -1900,6 +2194,40 @@ class PaymentDashboard {
             if (e.key === 'Escape' && settingsBlade.classList.contains('active')) {
                 closeSettings();
             }
+            if (e.key === 'Escape' && notificationsBlade.classList.contains('open')) {
+                closeNotifications();
+            }
+        });
+
+        // Notifications blade toggle
+        const notificationsBtn = document.getElementById('notificationsBtn');
+        const notificationsBlade = document.getElementById('notificationsBlade');
+        const closeNotificationsBtn = document.getElementById('closeNotificationsBtn');
+        const clearAllNotificationsBtn = document.getElementById('clearAllNotificationsBtn');
+
+        const openNotifications = () => {
+            notificationsBlade.classList.add('open');
+            settingsOverlay.classList.add('active');
+            // Mark all as read when opening
+            this.markAllNotificationsRead();
+        };
+
+        const closeNotifications = () => {
+            notificationsBlade.classList.remove('open');
+            if (!settingsBlade.classList.contains('active')) {
+                settingsOverlay.classList.remove('active');
+            }
+        };
+
+        notificationsBtn.addEventListener('click', openNotifications);
+        closeNotificationsBtn.addEventListener('click', closeNotifications);
+        settingsOverlay.addEventListener('click', () => {
+            closeNotifications();
+            closeSettings();
+        });
+
+        clearAllNotificationsBtn.addEventListener('click', () => {
+            this.clearAllNotifications();
         });
 
         // Test sound button
@@ -1923,6 +2251,33 @@ class PaymentDashboard {
             });
         }
 
+        // Test sale button
+        const testSaleBtn = document.getElementById('testSaleBtn');
+        if (testSaleBtn) {
+            testSaleBtn.addEventListener('click', () => {
+                // Close settings blade first
+                closeSettings();
+                // Small delay to let blade close animation complete
+                setTimeout(() => {
+                    // Pick a random project to simulate sale
+                    const projects = this.config.projects;
+                    const randomProject = projects[Math.floor(Math.random() * projects.length)];
+                    
+                    // Simulate sale notification
+                    const testSale = {
+                        projectId: randomProject.id,
+                        projectName: randomProject.name,
+                        count: 1,
+                        amount: Math.floor(Math.random() * 500) + 50 // Random amount between $50-$550
+                    };
+                    
+                    this.playSaleSound();
+                    this.showConfetti();
+                    this.showSaleNotifications([testSale]);
+                }, 150);
+            });
+        }
+
         // Stop server button
         const stopServerBtn = document.getElementById('stopServerBtn');
         if (stopServerBtn) {
@@ -1936,6 +2291,127 @@ class PaymentDashboard {
                 }
             });
         }
+        
+        // Setup rich error tooltips
+        this.setupErrorTooltips();
+    }
+
+    setupErrorTooltips() {
+        // Create tooltip element if it doesn't exist
+        let tooltip = document.getElementById('errorTooltip');
+        if (!tooltip) {
+            tooltip = document.createElement('div');
+            tooltip.id = 'errorTooltip';
+            tooltip.className = 'error-tooltip';
+            document.body.appendChild(tooltip);
+        }
+
+        // Delegate event handling to document for dynamic error indicators
+        document.addEventListener('mouseenter', (e) => {
+            if (!e.target || typeof e.target.closest !== 'function') return;
+            const errorIndicator = e.target.closest('.widget-error-indicator');
+            if (!errorIndicator) return;
+
+            const errors = JSON.parse(errorIndicator.dataset.errors || '[]');
+            if (errors.length === 0) return;
+
+            // Build tooltip content
+            const errorItems = errors.map(err => `<li class="error-tooltip-item">${err}</li>`).join('');
+            tooltip.innerHTML = `
+                <div class="error-tooltip-title">
+                    <span>⚠️</span>
+                    <span>API Errors (${errors.length})</span>
+                </div>
+                <ul class="error-tooltip-list">
+                    ${errorItems}
+                </ul>
+            `;
+
+            // Position tooltip near the error indicator
+            const rect = errorIndicator.getBoundingClientRect();
+            tooltip.style.left = `${rect.left}px`;
+            tooltip.style.top = `${rect.bottom + 10}px`;
+
+            // Show tooltip
+            setTimeout(() => tooltip.classList.add('show'), 10);
+        }, true);
+
+        document.addEventListener('mouseleave', (e) => {
+            if (!e.target || typeof e.target.closest !== 'function') return;
+            const errorIndicator = e.target.closest('.widget-error-indicator');
+            if (!errorIndicator) return;
+
+            tooltip.classList.remove('show');
+        }, true);
+        
+        // Setup balance tooltips
+        this.setupBalanceTooltips();
+    }
+
+    setupBalanceTooltips() {
+        // Create tooltip element if it doesn't exist
+        let tooltip = document.getElementById('balanceTooltip');
+        if (!tooltip) {
+            tooltip = document.createElement('div');
+            tooltip.id = 'balanceTooltip';
+            tooltip.className = 'balance-tooltip';
+            document.body.appendChild(tooltip);
+        }
+
+        // Delegate event handling to document for dynamic balance icons
+        document.addEventListener('mouseover', (e) => {
+            if (!e.target || typeof e.target.closest !== 'function') return;
+            const balanceIcon = e.target.closest('.balance-info-icon');
+            if (!balanceIcon) return;
+
+            const data = JSON.parse(balanceIcon.dataset.balanceBreakdown || '{}');
+            if (!data.hasStripe && !data.hasPaypal) return;
+
+            // Build tooltip content
+            let items = '';
+            if (data.hasStripe) {
+                items += `
+                    <div class="balance-tooltip-item">
+                        <span class="balance-tooltip-provider">💳 Stripe</span>
+                        <span class="balance-tooltip-amount">${this.formatCurrency(data.stripe)}</span>
+                    </div>
+                `;
+            }
+            if (data.hasPaypal) {
+                items += `
+                    <div class="balance-tooltip-item">
+                        <span class="balance-tooltip-provider">🅿️ PayPal</span>
+                        <span class="balance-tooltip-amount">${this.formatCurrency(data.paypal)}</span>
+                    </div>
+                `;
+            }
+
+            tooltip.innerHTML = `
+                <div class="balance-tooltip-title">
+                    <span>💰</span>
+                    <span>Balance Breakdown</span>
+                </div>
+                <div class="balance-tooltip-items">
+                    ${items}
+                </div>
+            `;
+
+            // Position tooltip near the icon
+            const rect = balanceIcon.getBoundingClientRect();
+            tooltip.style.left = `${rect.left}px`;
+            tooltip.style.top = `${rect.bottom + 10}px`;
+
+            // Show tooltip
+            setTimeout(() => tooltip.classList.add('show'), 10);
+        }, true);
+
+        document.addEventListener('mouseout', (e) => {
+            if (!e.target || typeof e.target.closest !== 'function') return;
+            const balanceIcon = e.target.closest('.balance-info-icon');
+            if (!balanceIcon) return;
+
+            tooltip.classList.remove('show');
+        }, true);
     }
 
     showLoading() {

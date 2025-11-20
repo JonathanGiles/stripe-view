@@ -72,7 +72,6 @@ app.post('/api/stripe/data', async (req, res) => {
 
         // Log key type for debugging
         const keyType = apiKey.substring(0, 8) + '...' + apiKey.substring(apiKey.length - 4);
-        console.log(`📡 Stripe API request with key: ${keyType}`);
 
         // Initialize Stripe with the provided key
         const stripe = new Stripe(apiKey);
@@ -94,15 +93,20 @@ app.post('/api/stripe/data', async (req, res) => {
         try {
             balance = await stripe.balance.retrieve();
             
-            // Log balance details for verification
+            // Log structured data for verification
             if (balance) {
                 const availableTotal = (balance.available || []).reduce((sum, b) => sum + b.amount, 0) / 100;
                 const pendingTotal = (balance.pending || []).reduce((sum, b) => sum + b.amount, 0) / 100;
                 const grandTotal = availableTotal + pendingTotal;
-                console.log(`✓ Stripe Balance Retrieved:`);
-                console.log(`  Available: $${availableTotal.toLocaleString()}`);
-                console.log(`  Pending: $${pendingTotal.toLocaleString()}`);
-                console.log(`  TOTAL: $${grandTotal.toLocaleString()} (should match Stripe Dashboard)`);
+                
+                // Store for consolidated logging (will be logged by client)
+                res.locals.stripeData = {
+                    provider: 'Stripe',
+                    charges: charges.data.length,
+                    balance: grandTotal,
+                    available: availableTotal,
+                    pending: pendingTotal
+                };
             }
         } catch (error) {
             console.warn('Could not fetch balance:', error.message);
@@ -164,7 +168,6 @@ app.post('/api/paypal/data', async (req, res) => {
 
         // Check if using Classic API (username/password/signature)
         if (credentials.username && credentials.password && credentials.signature) {
-            console.log('📡 Using PayPal Classic NVP/SOAP API');
             return await handleClassicPayPalAPI(credentials, startDate, endDate, res);
         }
         
@@ -174,8 +177,6 @@ app.post('/api/paypal/data', async (req, res) => {
                 error: 'PayPal credentials incomplete. Need either (clientId + secret) OR (username + password + signature)' 
             });
         }
-
-        console.log('📡 Using PayPal REST API');
 
         // Get OAuth token
         const authResponse = await fetch('https://api.paypal.com/v1/oauth2/token', {
@@ -312,7 +313,12 @@ async function handleClassicPayPalAPI(credentials, startDate, endDate, res) {
             if (nvpData.L_LONGMESSAGE0) {
                 errorMsg += ` - ${nvpData.L_LONGMESSAGE0}`;
             }
-            throw new Error(errorMsg);
+            const error = new Error(errorMsg);
+            // Mark security errors so we can suppress them in catch block
+            if (errorMsg.includes('Security header') || errorMsg.includes('Security error')) {
+                error.isSecurityError = true;
+            }
+            throw error;
         }
 
         // Parse transaction results
@@ -335,7 +341,11 @@ async function handleClassicPayPalAPI(credentials, startDate, endDate, res) {
             index++;
         }
 
-        console.log(`✅ Retrieved ${transactions.length} PayPal transactions via Classic API`);
+        // Store for consolidated logging (will be logged by client)
+        res.locals.paypalData = {
+            provider: 'PayPal',
+            transactions: transactions.length
+        };
 
         // Get balance using GetBalance method
         let balance = null;
@@ -380,7 +390,10 @@ async function handleClassicPayPalAPI(credentials, startDate, endDate, res) {
         });
 
     } catch (error) {
-        console.error('PayPal Classic API error:', error);
+        // Suppress security header errors (invalid credentials) in console
+        if (!error.isSecurityError) {
+            console.error('PayPal Classic API error:', error);
+        }
         res.status(500).json({
             error: error.message
         });
