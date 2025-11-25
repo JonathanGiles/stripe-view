@@ -284,15 +284,18 @@ restart_container() {
         return
     fi
     
-    print_color "$BLUE" "Stopping container..."
+    print_color "$BLUE" "Recreating container with new image..."
     docker stop "$CONTAINER_NAME"
-    
-    print_color "$BLUE" "Removing container..."
     docker rm "$CONTAINER_NAME"
     
-    print_color "$BLUE" "Starting new container from updated image..."
-    cd "$DEPLOYMENT_DIR"
-    docker compose up -d
+    print_color "$BLUE" "Starting container..."
+    docker run -d \
+        --name "$CONTAINER_NAME" \
+        --restart unless-stopped \
+        -p 3000:3000 \
+        --env-file "$DEPLOYMENT_DIR/.env" \
+        -v "$DATA_DIR:/config" \
+        "$IMAGE_NAME:$IMAGE_TAG"
     
     if [ $? -eq 0 ]; then
         echo ""
@@ -302,6 +305,8 @@ restart_container() {
         docker ps --filter "name=$CONTAINER_NAME"
     else
         print_color "$RED" "❌ Failed to restart container"
+        echo ""
+        print_color "$YELLOW" "💡 If using Portainer, restart the stack there instead"
     fi
 }
 
@@ -317,8 +322,8 @@ full_update() {
     echo "  3. Restart container with new image"
     echo ""
     
-    read -p "Continue? (y/N): " confirm
-    if [[ ! $confirm =~ ^[Yy]$ ]]; then
+    read -p "Continue? (Y/n): " confirm
+    if [[ $confirm =~ ^[Nn]$ ]]; then
         print_color "$YELLOW" "Cancelled"
         return
     fi
@@ -360,22 +365,36 @@ full_update() {
     CONTAINER_NAME="stripe-view"
     
     if docker ps -a --format '{{.Names}}' | grep -q "$CONTAINER_NAME"; then
+        print_color "$BLUE" "Stopping and removing old container..."
         docker stop "$CONTAINER_NAME" 2>/dev/null
         docker rm "$CONTAINER_NAME" 2>/dev/null
-    fi
-    
-    cd "$DEPLOYMENT_DIR"
-    docker compose up -d
-    
-    if [ $? -eq 0 ]; then
-        echo ""
-        print_color "$GREEN" "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-        print_color "$GREEN" "✅ Update complete! Container is running with latest code"
-        print_color "$GREEN" "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-        echo ""
-        docker ps --filter "name=$CONTAINER_NAME"
+        
+        print_color "$BLUE" "Starting container with new image..."
+        docker run -d \
+            --name "$CONTAINER_NAME" \
+            --restart unless-stopped \
+            -p 3000:3000 \
+            --env-file "$DEPLOYMENT_DIR/.env" \
+            -v "$DATA_DIR:/config" \
+            "$IMAGE_NAME:$IMAGE_TAG"
+        
+        if [ $? -eq 0 ]; then
+            echo ""
+            print_color "$GREEN" "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+            print_color "$GREEN" "✅ Update complete! Container is running with latest code"
+            print_color "$GREEN" "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+            echo ""
+            docker ps --filter "name=$CONTAINER_NAME"
+        else
+            print_color "$RED" "❌ Failed to start container"
+        fi
     else
-        print_color "$RED" "❌ Failed to start container"
+        echo ""
+        print_color "$YELLOW" "⚠️  Container not found locally"
+        print_color "$BLUE" "💡 If using Portainer stack, restart it there:"
+        echo "   1. Go to Stacks → stripe-view"
+        echo "   2. Click 'Stop' then 'Start'"
+        echo "   Or use 'Recreate' button in Containers view"
     fi
 }
 
