@@ -639,7 +639,7 @@ class PaymentDashboard {
             };
 
             // Save to server (view.json file)
-            const response = await fetch('http://localhost:3000/api/save-view', {
+            const response = await fetch('/api/save-view', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(layoutData)
@@ -1619,7 +1619,7 @@ class PaymentDashboard {
     async fetchStripeData(apiKey, startTimestamp) {
         try {
             // Call backend proxy that uses official Stripe SDK
-            const response = await fetch('http://localhost:3000/api/stripe/data', {
+            const response = await fetch('/api/stripe/data', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json'
@@ -1679,7 +1679,7 @@ class PaymentDashboard {
         
         try {
             // Call backend proxy for PayPal data
-            const response = await fetch('http://localhost:3000/api/paypal/data', {
+            const response = await fetch('/api/paypal/data', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json'
