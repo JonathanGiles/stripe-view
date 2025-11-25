@@ -12,7 +12,8 @@
 const express = require('express');
 const cors = require('cors');
 const Stripe = require('stripe');
-const fs = require('fs').promises;
+const fs = require('fs');
+const fsPromises = fs.promises;
 const path = require('path');
 
 const app = express();
@@ -68,7 +69,7 @@ app.use(express.json());
 app.post('/api/save-view', async (req, res) => {
     try {
         const viewPath = path.join(baseDir, 'view.json');
-        await fs.writeFile(viewPath, JSON.stringify(req.body, null, 2));
+        await fsPromises.writeFile(viewPath, JSON.stringify(req.body, null, 2));
         console.log('✅ Saved view.json');
         res.json({ success: true });
     } catch (error) {
