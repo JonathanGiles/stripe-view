@@ -292,7 +292,7 @@ restart_container() {
     
     print_color "$BLUE" "Starting new container from updated image..."
     cd "$DEPLOYMENT_DIR"
-    docker-compose up -d
+    docker compose up -d
     
     if [ $? -eq 0 ]; then
         echo ""
@@ -365,7 +365,7 @@ full_update() {
     fi
     
     cd "$DEPLOYMENT_DIR"
-    docker-compose up -d
+    docker compose up -d
     
     if [ $? -eq 0 ]; then
         echo ""
