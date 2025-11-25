@@ -269,6 +269,116 @@ view_logs() {
     docker logs -f --tail 50 stripe-view
 }
 
+# Function to restart container
+restart_container() {
+    print_header
+    print_color "$YELLOW" "🔄 Restart Container"
+    echo ""
+    
+    CONTAINER_NAME="stripe-view"
+    
+    if ! docker ps -a --format '{{.Names}}' | grep -q "$CONTAINER_NAME"; then
+        print_color "$RED" "❌ Container '$CONTAINER_NAME' not found"
+        echo ""
+        print_color "$BLUE" "💡 Make sure the container is deployed via docker-compose or Portainer"
+        return
+    fi
+    
+    print_color "$BLUE" "Stopping container..."
+    docker stop "$CONTAINER_NAME"
+    
+    print_color "$BLUE" "Removing container..."
+    docker rm "$CONTAINER_NAME"
+    
+    print_color "$BLUE" "Starting new container from updated image..."
+    cd "$DEPLOYMENT_DIR"
+    docker-compose up -d
+    
+    if [ $? -eq 0 ]; then
+        echo ""
+        print_color "$GREEN" "✅ Container restarted successfully!"
+        echo ""
+        print_color "$BLUE" "Container is now running with the latest image"
+        docker ps --filter "name=$CONTAINER_NAME"
+    else
+        print_color "$RED" "❌ Failed to restart container"
+    fi
+}
+
+# Function to do full update (pull + build + restart)
+full_update() {
+    print_header
+    print_color "$YELLOW" "🚀 Full Update & Redeploy"
+    echo ""
+    
+    print_color "$BLUE" "This will:"
+    echo "  1. Pull latest code from Git"
+    echo "  2. Build new Docker image"
+    echo "  3. Restart container with new image"
+    echo ""
+    
+    read -p "Continue? (y/N): " confirm
+    if [[ ! $confirm =~ ^[Yy]$ ]]; then
+        print_color "$YELLOW" "Cancelled"
+        return
+    fi
+    
+    # Step 1: Pull latest code
+    print_color "$BLUE" "━━━ Step 1/3: Pulling latest code ━━━"
+    cd "$PROJECT_ROOT"
+    git fetch origin
+    LOCAL=$(git rev-parse @)
+    REMOTE=$(git rev-parse @{u})
+    
+    if [ $LOCAL = $REMOTE ]; then
+        print_color "$GREEN" "✅ Already up to date"
+    else
+        print_color "$BLUE" "Pulling changes..."
+        git pull
+        if [ $? -ne 0 ]; then
+            print_color "$RED" "❌ Git pull failed"
+            return
+        fi
+        print_color "$GREEN" "✅ Code updated"
+    fi
+    echo ""
+    
+    # Step 2: Build image
+    print_color "$BLUE" "━━━ Step 2/3: Building Docker image ━━━"
+    cd "$DEPLOYMENT_DIR"
+    docker build -t "$IMAGE_NAME:$IMAGE_TAG" -f Dockerfile "$PROJECT_ROOT"
+    
+    if [ $? -ne 0 ]; then
+        print_color "$RED" "❌ Build failed"
+        return
+    fi
+    print_color "$GREEN" "✅ Image built successfully"
+    echo ""
+    
+    # Step 3: Restart container
+    print_color "$BLUE" "━━━ Step 3/3: Restarting container ━━━"
+    CONTAINER_NAME="stripe-view"
+    
+    if docker ps -a --format '{{.Names}}' | grep -q "$CONTAINER_NAME"; then
+        docker stop "$CONTAINER_NAME" 2>/dev/null
+        docker rm "$CONTAINER_NAME" 2>/dev/null
+    fi
+    
+    cd "$DEPLOYMENT_DIR"
+    docker-compose up -d
+    
+    if [ $? -eq 0 ]; then
+        echo ""
+        print_color "$GREEN" "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+        print_color "$GREEN" "✅ Update complete! Container is running with latest code"
+        print_color "$GREEN" "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+        echo ""
+        docker ps --filter "name=$CONTAINER_NAME"
+    else
+        print_color "$RED" "❌ Failed to start container"
+    fi
+}
+
 # Function to cleanup old images
 cleanup_images() {
     print_header
@@ -383,12 +493,14 @@ show_menu() {
     echo "  1) Initial setup (first time)"
     echo "  2) Build Docker image"
     echo "  3) Pull latest code from Git"
-    echo "  4) Push image to registry (optional)"
-    echo "  5) Portainer deployment help"
-    echo "  6) View deployment info"
-    echo "  7) View container logs (local only)"
-    echo "  8) Cleanup old images"
-    echo "  9) Exit"
+    echo "  4) 🚀 Full update & redeploy (pull + build + restart)"
+    echo "  5) Restart container only"
+    echo "  6) Push image to registry (optional)"
+    echo "  7) Portainer deployment help"
+    echo "  8) View deployment info"
+    echo "  9) View container logs"
+    echo " 10) Cleanup old images"
+    echo " 11) Exit"
     echo ""
 }
 
@@ -398,23 +510,25 @@ main() {
     
     while true; do
         show_menu
-        read -p "Enter your choice (1-9): " choice
+        read -p "Enter your choice (1-11): " choice
         
         case $choice in
             1) setup_config ;;
             2) build_image ;;
             3) pull_latest ;;
-            4) push_image ;;
-            5) show_portainer_help ;;
-            6) show_info ;;
-            7) view_logs ;;
-            8) cleanup_images ;;
-            9)
+            4) full_update ;;
+            5) restart_container ;;
+            6) push_image ;;
+            7) show_portainer_help ;;
+            8) show_info ;;
+            9) view_logs ;;
+            10) cleanup_images ;;
+            11)
                 print_color "$GREEN" "👋 Goodbye!"
                 exit 0
                 ;;
             *)
-                print_color "$RED" "❌ Invalid choice. Please enter 1-9."
+                print_color "$RED" "❌ Invalid choice. Please enter 1-11."
                 ;;
         esac
         
