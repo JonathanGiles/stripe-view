@@ -1,0 +1,21 @@
+version: '3.8'
+
+services:
+  stripe-view:
+    image: stripe-view:latest
+    container_name: stripe-view
+    ports:
+      - "3000:3000"
+    environment:
+      - BASIC_AUTH_USER=${BASIC_AUTH_USER:-admin}
+      - BASIC_AUTH_PASS=${BASIC_AUTH_PASS:-changeme}
+      - PORT=3000
+    volumes:
+      - ./data:/config
+    networks:
+      - stripe-view-network
+    restart: unless-stopped
+
+networks:
+  stripe-view-network:
+    driver: bridge

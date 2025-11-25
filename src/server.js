@@ -16,14 +16,45 @@ const fs = require('fs').promises;
 const path = require('path');
 
 const app = express();
-const PORT = 3000;
+const PORT = process.env.PORT || 3000;
 
-// Detect if running as pkg executable
+// Detect if running as pkg executable or in Docker
 const isPkg = typeof process.pkg !== 'undefined';
-const baseDir = isPkg ? path.dirname(process.execPath) : path.join(__dirname, '..');
+const isDocker = process.env.DOCKER || fs.existsSync('/.dockerenv');
 
-console.log(`Running mode: ${isPkg ? 'Standalone Executable' : 'Node.js'}`);
+// Determine base directory for config files
+// Docker: /config (volume mount)
+// Pkg: executable directory
+// Dev: parent directory
+let baseDir;
+if (isDocker && fs.existsSync('/config')) {
+    baseDir = '/config';
+} else if (isPkg) {
+    baseDir = path.dirname(process.execPath);
+} else {
+    baseDir = path.join(__dirname, '..');
+}
+
+// Check if HTTP Basic Auth is enabled via environment variables
+const BASIC_AUTH_USER = process.env.BASIC_AUTH_USER;
+const BASIC_AUTH_PASS = process.env.BASIC_AUTH_PASS;
+const authEnabled = BASIC_AUTH_USER && BASIC_AUTH_PASS;
+
+console.log(`Running mode: ${isDocker ? 'Docker' : isPkg ? 'Standalone Executable' : 'Node.js'}`);
 console.log(`Base directory: ${baseDir}`);
+if (authEnabled) {
+    console.log(`🔒 HTTP Basic Auth enabled for user: ${BASIC_AUTH_USER}`);
+}
+
+// Apply Basic Auth if credentials are provided
+if (authEnabled) {
+    const basicAuth = require('express-basic-auth');
+    app.use(basicAuth({
+        users: { [BASIC_AUTH_USER]: BASIC_AUTH_PASS },
+        challenge: true,
+        realm: 'Stripe View Dashboard'
+    }));
+}
 
 // Enable CORS for frontend
 app.use(cors());

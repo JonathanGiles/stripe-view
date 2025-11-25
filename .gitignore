@@ -9,3 +9,7 @@ dist/
 *.exe
 
 .DS_Store
+
+# Deployment files (keep structure, ignore data)
+deployment/.env
+deployment/data/

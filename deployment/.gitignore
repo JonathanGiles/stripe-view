@@ -1,0 +1,5 @@
+# Environment files
+.env
+
+# Data directory (contains config.json with API keys)
+data/
